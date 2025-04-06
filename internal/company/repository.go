@@ -225,15 +225,14 @@ func (r *Repository) ListCompanies() ([]Company, error) {
 	return companies, nil
 }
 
-// ListCompaniesForUser returns all companies for a given user
+// ListCompaniesForUser returns all companies a user has access to
 func (r *Repository) ListCompaniesForUser(userID int64) ([]Company, error) {
-	query := `
-		SELECT DISTINCT c.id, c.name, c.phone, c.email, c.identifier, c.logo, c.created_at, c.updated_at 
+	rows, err := r.db.Query(`
+		SELECT c.id, c.name, c.email, c.phone, c.address, c.identifier, c.logo, c.created_at, c.updated_at
 		FROM companies c
 		JOIN company_users cu ON c.id = cu.company_id
 		WHERE cu.user_id = ?
-	`
-	rows, err := r.db.Query(query, userID)
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
