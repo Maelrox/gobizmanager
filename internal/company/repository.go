@@ -262,6 +262,11 @@ func (r *Repository) ListCompaniesForUser(userID int64) ([]Company, error) {
 
 		companies = append(companies, c)
 	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating companies: %w", err)
+	}
+
 	return companies, nil
 }
 

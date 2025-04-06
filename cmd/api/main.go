@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	_ "github.com/mattn/go-sqlite3"
 	"go.uber.org/zap"
 
@@ -68,11 +69,23 @@ func main() {
 	companyHandler := company.NewHandler(companyRepo, rbacRepo, userRepo, roleRepo, permissionRepo, msgStore)
 	rbacHandler := rbac.NewHandler(rbacRepo, msgStore)
 	companyUserHandler := company_user.NewHandler(companyUserRepo, rbacRepo, msgStore)
+	userHandler := user.NewHandler(userRepo)
 
 	// Create router
 	r := chi.NewRouter()
 
-	// Add middleware
+	// Add CORS middleware
+	corsMiddleware := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	})
+	r.Use(corsMiddleware.Handler)
+
+	// Add other middleware
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
 	r.Use(context.LanguageMiddleware())
@@ -89,8 +102,9 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(jwtManager, msgStore))
 		r.Mount("/companies", company.Routes(companyHandler, msgStore))
-		r.Mount("/rbac", rbac.Routes(rbacHandler))
+		r.Mount("/rbac", rbac.Routes(rbacHandler, msgStore))
 		r.Mount("/company-users", company_user.Routes(companyUserHandler))
+		r.Mount("/users", user.Routes(userHandler))
 	})
 
 	// Start server

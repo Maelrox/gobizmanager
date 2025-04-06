@@ -139,6 +139,11 @@ func (h *Handler) listCompanies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Return empty array if no companies found
+	if companies == nil {
+		companies = []Company{}
+	}
+
 	utils.JSON(w, http.StatusOK, companies)
 }
 

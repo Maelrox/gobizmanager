@@ -77,3 +77,4 @@ docker-compose.override.yml
 *.swp
 *.swo
 *~ 
+node_modules

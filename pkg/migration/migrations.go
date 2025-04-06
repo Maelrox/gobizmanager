@@ -243,5 +243,45 @@ func ApplyMigrations(db *sql.DB) error {
 		}
 	}
 
+	// Create permission_groups table
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS permission_groups (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			company_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+			UNIQUE (company_id, name)
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create permission_groups table: %w", err)
+	}
+
+	// Create permission_group_permissions table
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS permission_group_permissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			group_id INTEGER NOT NULL,
+			permission_id INTEGER NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (group_id) REFERENCES permission_groups(id) ON DELETE CASCADE,
+			FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
+			UNIQUE (group_id, permission_id)
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create permission_group_permissions table: %w", err)
+	}
+
+	// Enable foreign key support for SQLite
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	if err != nil {
+		return fmt.Errorf("failed to enable foreign key support: %w", err)
+	}
+
 	return nil
 }

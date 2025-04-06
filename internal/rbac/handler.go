@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -74,24 +75,6 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get company ID from URL
-	companyID := chi.URLParam(r, "companyID")
-	if companyID == "" {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationInvalidID))
-		return
-	}
-
-	// Verify user has access to this company
-	hasAccess, err := h.Repo.HasCompanyAccess(userID, companyID)
-	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
-		return
-	}
-	if !hasAccess {
-		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
-		return
-	}
-
 	var req CreatePermissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
@@ -100,6 +83,17 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.Validator.Struct(req); err != nil {
 		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	// Verify user has access to this company
+	hasAccess, err := h.Repo.HasCompanyAccess(userID, strconv.FormatInt(req.CompanyID, 10))
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !hasAccess {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
 		return
 	}
 
@@ -115,7 +109,7 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	permission, err := h.Repo.CreatePermission(req.Name, req.Description, req.RoleID)
+	permission, err := h.Repo.CreatePermission(req.CompanyID, req.Name, req.Description, req.RoleID)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCreateFailed))
 		return
@@ -175,82 +169,6 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.JSON(w, http.StatusCreated, role)
-}
-
-// AssignPermission assigns a permission to a role
-func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
-	lang := context.GetLanguage(r.Context())
-
-	// Get user ID from context
-	userID, ok := auth.GetUserID(r.Context())
-	if !ok {
-		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
-		return
-	}
-
-	var req AssignPermissionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
-		return
-	}
-
-	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
-		return
-	}
-
-	// Convert string IDs to int64
-	roleID, err := strconv.ParseInt(req.RoleID, 10, 64)
-	if err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
-		return
-	}
-
-	permissionID, err := strconv.ParseInt(req.PermissionID, 10, 64)
-	if err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
-		return
-	}
-
-	// Get the role to verify it exists and get its company ID
-	role, err := h.Repo.GetRoleByID(roleID)
-	if err != nil {
-		utils.JSONError(w, http.StatusNotFound, h.MsgStore.GetMessage(lang, language.MsgRoleNotFound))
-		return
-	}
-
-	// Get the permission to verify it exists and get its company ID
-	permission, err := h.Repo.GetPermissionByID(permissionID)
-	if err != nil {
-		utils.JSONError(w, http.StatusNotFound, h.MsgStore.GetMessage(lang, language.MsgPermissionNotFound))
-		return
-	}
-
-	// Verify both role and permission belong to the same company
-	if role.CompanyID != permission.CompanyID {
-		utils.JSONError(w, http.StatusForbidden, "Role and permission must belong to the same company")
-		return
-	}
-
-	// Verify user has access to this company
-	hasAccess, err := h.Repo.HasCompanyAccess(userID, strconv.FormatInt(role.CompanyID, 10))
-	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
-		return
-	}
-	if !hasAccess {
-		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
-		return
-	}
-
-	if err := h.Repo.AssignPermissionToRole(req.RoleID, req.PermissionID); err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionAssignFailed))
-		return
-	}
-
-	utils.JSON(w, http.StatusOK, map[string]interface{}{
-		"message": h.MsgStore.GetMessage(lang, language.MsgPermissionAssigned),
-	})
 }
 
 // RemovePermission removes a permission from a role
@@ -483,5 +401,64 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 
 	utils.JSON(w, http.StatusOK, map[string]interface{}{
 		"message": h.MsgStore.GetMessage(lang, language.MsgRoleAssigned),
+	})
+}
+
+// CreatePermissionModuleAction associates a module action with a permission
+func (h *Handler) CreatePermissionModuleAction(w http.ResponseWriter, r *http.Request) {
+	lang := context.GetLanguage(r.Context())
+
+	// Get user ID from context
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
+		return
+	}
+
+	var req CreatePermissionModuleActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	if err := h.Validator.Struct(req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	// Get the permission to verify company access
+	permission, err := h.Repo.GetPermissionByID(req.PermissionID)
+	if err != nil {
+		utils.JSONError(w, http.StatusNotFound, h.MsgStore.GetMessage(lang, language.MsgPermissionNotFound))
+		return
+	}
+
+	// Verify user has access to this company
+	hasAccess, err := h.Repo.HasCompanyAccess(userID, strconv.FormatInt(permission.CompanyID, 10))
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !hasAccess {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
+	// Create the association
+	if err := h.Repo.CreatePermissionModuleAction(req.PermissionID, req.ModuleActionID); err != nil {
+		if strings.Contains(err.Error(), "already associated") {
+			utils.JSONError(w, http.StatusConflict, h.MsgStore.GetMessage(lang, language.MsgPermissionAlreadyAssociated))
+			return
+		}
+		if strings.Contains(err.Error(), "module action not found") {
+			utils.JSONError(w, http.StatusNotFound, h.MsgStore.GetMessage(lang, language.MsgModuleActionNotFound))
+			return
+		}
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCreateFailed))
+		return
+	}
+
+	utils.JSON(w, http.StatusCreated, map[string]interface{}{
+		"message": h.MsgStore.GetMessage(lang, language.MsgPermissionModuleActionCreated),
 	})
 }

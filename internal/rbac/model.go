@@ -66,6 +66,7 @@ type CreateCompanyUserRequest struct {
 
 // CreatePermissionRequest represents the request to create a new permission
 type CreatePermissionRequest struct {
+	CompanyID   int64  `json:"company_id" validate:"required"`
 	Name        string `json:"name" validate:"required"`
 	Description string `json:"description" validate:"required"`
 	RoleID      int64  `json:"role_id" validate:"required"`
@@ -100,4 +101,18 @@ type RootGroup struct {
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// CreatePermissionGroupRequest represents the request to create a permission group
+type CreatePermissionGroupRequest struct {
+	CompanyID     int64   `json:"company_id" validate:"required" msg:"company.id_required"`
+	Name          string  `json:"name" validate:"required,min=3,max=100" msg:"permission.name_required"`
+	Description   string  `json:"description" validate:"required" msg:"permission.description_required"`
+	PermissionIDs []int64 `json:"permission_ids" validate:"required,min=1" msg:"permission.ids_required"`
+}
+
+// CreatePermissionModuleActionRequest represents a request to associate a module action with a permission
+type CreatePermissionModuleActionRequest struct {
+	PermissionID   int64 `json:"permission_id" validate:"required"`
+	ModuleActionID int64 `json:"module_action_id" validate:"required"`
 }

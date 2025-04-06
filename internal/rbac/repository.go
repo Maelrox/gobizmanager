@@ -124,7 +124,7 @@ func (r *Repository) GetRoleByID(id int64) (*Role, error) {
 }
 
 // Permission operations
-func (r *Repository) CreatePermission(name, description string, roleID int64) (*Permission, error) {
+func (r *Repository) CreatePermission(companyID int64, name, description string, roleID int64) (*Permission, error) {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -133,9 +133,9 @@ func (r *Repository) CreatePermission(name, description string, roleID int64) (*
 
 	// Create permission
 	result, err := tx.Exec(`
-		INSERT INTO permissions (name, description, created_at, updated_at)
-		VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-	`, name, description)
+		INSERT INTO permissions (company_id, name, description, created_at, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, companyID, name, description)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create permission: %w", err)
 	}
@@ -161,6 +161,7 @@ func (r *Repository) CreatePermission(name, description string, roleID int64) (*
 	// Return the full permission object
 	permission := &Permission{
 		ID:          permissionID,
+		CompanyID:   companyID,
 		Name:        name,
 		Description: description,
 		CreatedAt:   time.Now(),
@@ -471,11 +472,11 @@ func (r *Repository) GetRoleWithPermissions(roleID string) (*Role, error) {
 // ListPermissions returns all permissions for a company
 func (r *Repository) ListPermissions(companyID int64) ([]Permission, error) {
 	rows, err := r.db.Query(`
-		SELECT DISTINCT p.id, p.name, p.description, p.created_at, p.updated_at
+		SELECT DISTINCT p.id, p.name, p.company_id, p.description, p.created_at, p.updated_at
 		FROM permissions p
 		JOIN role_permissions rp ON p.id = rp.permission_id
 		JOIN roles r ON rp.role_id = r.id
-		WHERE r.company_id = ? OR r.company_id IS NULL
+		WHERE p.company_id = ? OR p.company_id IS NULL
 	`, companyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list permissions: %w", err)
@@ -485,8 +486,12 @@ func (r *Repository) ListPermissions(companyID int64) ([]Permission, error) {
 	var permissions []Permission
 	for rows.Next() {
 		var p Permission
-		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		var companyID sql.NullInt64
+		if err := rows.Scan(&p.ID, &p.Name, &companyID, &p.Description, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan permission: %w", err)
+		}
+		if companyID.Valid {
+			p.CompanyID = companyID.Int64
 		}
 		permissions = append(permissions, p)
 	}
@@ -569,4 +574,48 @@ func (r *Repository) GetPermissionByID(id int64) (*Permission, error) {
 		permission.CompanyID = companyID.Int64
 	}
 	return &permission, nil
+}
+
+// CreatePermissionModuleAction associates a module action with a permission
+func (r *Repository) CreatePermissionModuleAction(permissionID, moduleActionID int64) error {
+	// Check if the association already exists
+	var exists bool
+	err := r.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM permission_module_actions 
+			WHERE permission_id = ? AND module_action_id = ?
+		)
+	`, permissionID, moduleActionID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check existing association: %w", err)
+	}
+	if exists {
+		return fmt.Errorf("module action already associated with this permission")
+	}
+
+	// Verify module action exists
+	var moduleActionExists bool
+	err = r.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM module_actions 
+			WHERE id = ?
+		)
+	`, moduleActionID).Scan(&moduleActionExists)
+	if err != nil {
+		return fmt.Errorf("failed to verify module action: %w", err)
+	}
+	if !moduleActionExists {
+		return fmt.Errorf("module action not found")
+	}
+
+	// Create the association
+	_, err = r.db.Exec(`
+		INSERT INTO permission_module_actions (permission_id, module_action_id, created_at, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, permissionID, moduleActionID)
+	if err != nil {
+		return fmt.Errorf("failed to create permission module action: %w", err)
+	}
+
+	return nil
 }
