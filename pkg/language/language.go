@@ -69,6 +69,7 @@ const (
 	MsgPermissionRemoved      = "permission.removed"
 	MsgRoleAssignFailed       = "role.assign_failed"
 	MsgRoleAssigned           = "role.assigned"
+	MsgPermissionNotFound     = "permission.not_found"
 
 	// Validation messages
 	MsgValidationFailed    = "validation.failed"
@@ -166,6 +167,7 @@ func NewMessageStore() *MessageStore {
 		MsgPermissionRemoved:      "Permission removed successfully",
 		MsgRoleAssignFailed:       "Failed to assign role",
 		MsgRoleAssigned:           "Role assigned successfully",
+		MsgPermissionNotFound:     "Permission not found",
 
 		// Validation messages
 		MsgValidationFailed:    "Validation failed",
@@ -251,6 +253,7 @@ func NewMessageStore() *MessageStore {
 		MsgPermissionRemoved:      "Permiso eliminado exitosamente",
 		MsgRoleAssignFailed:       "Error al asignar el rol",
 		MsgRoleAssigned:           "Rol asignado exitosamente",
+		MsgPermissionNotFound:     "Permiso no encontrado",
 
 		// Validation messages
 		MsgValidationFailed:    "Error de validación",

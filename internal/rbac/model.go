@@ -28,9 +28,10 @@ type ModuleAction struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// Permission represents a system permission
+// Permission represents a permission in the system
 type Permission struct {
 	ID          int64     `json:"id"`
+	CompanyID   int64     `json:"company_id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`

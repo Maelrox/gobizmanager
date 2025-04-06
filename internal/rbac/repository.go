@@ -553,3 +553,20 @@ func (r *Repository) GetModuleActionID(moduleName, actionName string) (int64, er
 	}
 	return id, nil
 }
+
+// GetPermissionByID retrieves a permission by its ID
+func (r *Repository) GetPermissionByID(id int64) (*Permission, error) {
+	var permission Permission
+	var companyID sql.NullInt64
+	err := r.db.QueryRow(`
+		SELECT id, company_id, name, description, created_at, updated_at 
+		FROM permissions WHERE id = ?
+	`, id).Scan(&permission.ID, &companyID, &permission.Name, &permission.Description, &permission.CreatedAt, &permission.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if companyID.Valid {
+		permission.CompanyID = companyID.Int64
+	}
+	return &permission, nil
+}

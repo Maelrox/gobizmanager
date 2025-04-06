@@ -89,11 +89,13 @@ var migrations = []struct {
 		name: "Create permissions table",
 		stmt: `CREATE TABLE IF NOT EXISTS permissions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			company_id INTEGER,
 			name TEXT NOT NULL,
 			description TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(name)
+			FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+			UNIQUE(company_id, name)
 		)`,
 	},
 	{
@@ -170,11 +172,11 @@ var migrations = []struct {
 			VALUES (2, NULL, 'USER', 'Basic user role with limited access', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 			-- Create default permissions
-			INSERT OR IGNORE INTO permissions (id, name, description, created_at, updated_at)
+			INSERT OR IGNORE INTO permissions (id, company_id, name, description, created_at, updated_at)
 			VALUES 
-				(1, 'manage_companies', 'Full access to company management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-				(2, 'manage_users', 'Full access to user management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-				(3, 'manage_roles', 'Full access to role management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+				(1, 1, 'manage_companies', 'Full access to company management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(2, 1, 'manage_users', 'Full access to user management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(3, 1, 'manage_roles', 'Full access to role management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 			-- Add module actions to permissions
 			INSERT OR IGNORE INTO permission_module_actions (permission_id, module_action_id, created_at, updated_at)

@@ -199,6 +199,50 @@ func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Convert string IDs to int64
+	roleID, err := strconv.ParseInt(req.RoleID, 10, 64)
+	if err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	permissionID, err := strconv.ParseInt(req.PermissionID, 10, 64)
+	if err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	// Get the role to verify it exists and get its company ID
+	role, err := h.Repo.GetRoleByID(roleID)
+	if err != nil {
+		utils.JSONError(w, http.StatusNotFound, h.MsgStore.GetMessage(lang, language.MsgRoleNotFound))
+		return
+	}
+
+	// Get the permission to verify it exists and get its company ID
+	permission, err := h.Repo.GetPermissionByID(permissionID)
+	if err != nil {
+		utils.JSONError(w, http.StatusNotFound, h.MsgStore.GetMessage(lang, language.MsgPermissionNotFound))
+		return
+	}
+
+	// Verify both role and permission belong to the same company
+	if role.CompanyID != permission.CompanyID {
+		utils.JSONError(w, http.StatusForbidden, "Role and permission must belong to the same company")
+		return
+	}
+
+	// Verify user has access to this company
+	hasAccess, err := h.Repo.HasCompanyAccess(userID, strconv.FormatInt(role.CompanyID, 10))
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !hasAccess {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
 	if err := h.Repo.AssignPermissionToRole(req.RoleID, req.PermissionID); err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionAssignFailed))
 		return
