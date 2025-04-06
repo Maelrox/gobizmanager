@@ -30,13 +30,11 @@ type ModuleAction struct {
 
 // Permission represents a system permission
 type Permission struct {
-	ID             string    `json:"id"`
-	RoleID         int64     `json:"role_id"`
-	ModuleActionID int64     `json:"module_action_id"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // Role represents a system role
@@ -69,6 +67,7 @@ type CreateCompanyUserRequest struct {
 type CreatePermissionRequest struct {
 	Name        string `json:"name" validate:"required"`
 	Description string `json:"description" validate:"required"`
+	RoleID      int64  `json:"role_id" validate:"required"`
 }
 
 // CreateRoleRequest represents the request to create a new role

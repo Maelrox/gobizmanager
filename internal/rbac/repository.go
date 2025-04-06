@@ -106,23 +106,50 @@ func (r *Repository) GetRoleByID(id int64) (*Role, error) {
 }
 
 // Permission operations
-func (r *Repository) CreatePermission(name, description string) (int64, error) {
-	now := time.Now()
-	result, err := r.db.Exec(
-		"INSERT INTO permissions (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)",
-		name, description, now, now,
-	)
+func (r *Repository) CreatePermission(name, description string, roleID int64) (int64, error) {
+	tx, err := r.db.Begin()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	return result.LastInsertId()
+	defer tx.Rollback()
+
+	// Create permission
+	result, err := tx.Exec(`
+		INSERT INTO permissions (name, description, created_at, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, name, description)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create permission: %w", err)
+	}
+
+	permissionID, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get permission ID: %w", err)
+	}
+
+	// Associate permission with role
+	_, err = tx.Exec(`
+		INSERT INTO role_permissions (role_id, permission_id, created_at, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, roleID, permissionID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to associate permission with role: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return permissionID, nil
 }
 
 func (r *Repository) GetPermissionsByRoleID(roleID int64) ([]Permission, error) {
-	rows, err := r.db.Query(
-		"SELECT id, role_id, module_action_id, created_at, updated_at FROM permissions WHERE role_id = ?",
-		roleID,
-	)
+	rows, err := r.db.Query(`
+		SELECT p.id, p.name, p.description, p.created_at, p.updated_at
+		FROM permissions p
+		JOIN role_permissions rp ON p.id = rp.permission_id
+		WHERE rp.role_id = ?
+	`, roleID)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +158,7 @@ func (r *Repository) GetPermissionsByRoleID(roleID int64) ([]Permission, error) 
 	var permissions []Permission
 	for rows.Next() {
 		var p Permission
-		if err := rows.Scan(&p.ID, &p.RoleID, &p.ModuleActionID, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		permissions = append(permissions, p)
@@ -403,11 +430,10 @@ func (r *Repository) GetRoleWithPermissions(roleID string) (*Role, error) {
 
 	// Get permissions for the role
 	rows, err := r.db.Query(`
-		SELECT p.id, p.role_id, p.module_action_id, p.created_at, p.updated_at,
-		       ma.name, ma.description
+		SELECT p.id, p.name, p.description, p.created_at, p.updated_at
 		FROM permissions p
-		JOIN module_actions ma ON p.module_action_id = ma.id
-		WHERE p.role_id = ?
+		JOIN role_permissions rp ON p.id = rp.permission_id
+		WHERE rp.role_id = ?
 	`, id)
 	if err != nil {
 		return nil, err
@@ -417,10 +443,7 @@ func (r *Repository) GetRoleWithPermissions(roleID string) (*Role, error) {
 	var permissions []Permission
 	for rows.Next() {
 		var p Permission
-		if err := rows.Scan(
-			&p.ID, &p.RoleID, &p.ModuleActionID, &p.CreatedAt, &p.UpdatedAt,
-			&p.Name, &p.Description,
-		); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		permissions = append(permissions, p)
@@ -430,27 +453,25 @@ func (r *Repository) GetRoleWithPermissions(roleID string) (*Role, error) {
 	return role, nil
 }
 
-// ListPermissions returns all permissions
-func (r *Repository) ListPermissions() ([]Permission, error) {
+// ListPermissions returns all permissions for a company
+func (r *Repository) ListPermissions(companyID int64) ([]Permission, error) {
 	rows, err := r.db.Query(`
-		SELECT p.id, p.role_id, p.module_action_id, p.created_at, p.updated_at,
-		       ma.name, ma.description
+		SELECT DISTINCT p.id, p.name, p.description, p.created_at, p.updated_at
 		FROM permissions p
-		JOIN module_actions ma ON p.module_action_id = ma.id
-	`)
+		JOIN role_permissions rp ON p.id = rp.permission_id
+		JOIN roles r ON rp.role_id = r.id
+		WHERE r.company_id = ? OR r.company_id IS NULL
+	`, companyID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list permissions: %w", err)
 	}
 	defer rows.Close()
 
 	var permissions []Permission
 	for rows.Next() {
 		var p Permission
-		if err := rows.Scan(
-			&p.ID, &p.RoleID, &p.ModuleActionID, &p.CreatedAt, &p.UpdatedAt,
-			&p.Name, &p.Description,
-		); err != nil {
-			return nil, err
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan permission: %w", err)
 		}
 		permissions = append(permissions, p)
 	}

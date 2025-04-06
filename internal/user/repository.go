@@ -210,7 +210,7 @@ func (r *Repository) RegisterRootUser(username, password string) (int64, error) 
 	return userID, nil
 }
 
-// RegisterUser creates a new user and returns their ID
+// RegisterUser creates a new ROOT user
 func (r *Repository) RegisterUser(username, password, phone string) (int64, error) {
 	// Start transaction
 	tx, err := r.db.Begin()

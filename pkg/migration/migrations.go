@@ -187,13 +187,6 @@ var migrations = []struct {
 			SELECT 3, id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 			FROM module_actions
 			WHERE module_id = 3;
-
-			-- Grant all permissions to ROOT role
-			INSERT OR IGNORE INTO role_permissions (role_id, permission_id, created_at, updated_at)
-			VALUES 
-				(1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-				(1, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-				(1, 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 		`,
 	},
 }

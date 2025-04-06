@@ -52,6 +52,15 @@ func (r *Repository) CreateCompanyWithTx(tx *sql.Tx, name, email, phone, address
 		return 0, fmt.Errorf("failed to get company ID: %w", err)
 	}
 
+	// Create company-user relationship
+	_, err = tx.Exec(`
+		INSERT INTO company_users (company_id, user_id, is_main, created_at, updated_at)
+		VALUES (?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, companyID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create company-user relationship: %w", err)
+	}
+
 	// Create ADMIN role for the company
 	roleResult, err := tx.Exec(`
 		INSERT INTO roles (name, description, company_id, created_at, updated_at)
@@ -66,13 +75,26 @@ func (r *Repository) CreateCompanyWithTx(tx *sql.Tx, name, email, phone, address
 		return 0, fmt.Errorf("failed to get role ID: %w", err)
 	}
 
-	// Add user to company
-	_, err = tx.Exec(`
-		INSERT INTO company_users (company_id, user_id, is_main, created_at, updated_at)
-		VALUES (?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-	`, companyID, userID)
+	// Get all permissions
+	rows, err := tx.Query("SELECT id FROM permissions")
 	if err != nil {
-		return 0, fmt.Errorf("failed to add user to company: %w", err)
+		return 0, fmt.Errorf("failed to get permissions: %w", err)
+	}
+	defer rows.Close()
+
+	// Assign all permissions to ADMIN role
+	for rows.Next() {
+		var permissionID int64
+		if err := rows.Scan(&permissionID); err != nil {
+			return 0, fmt.Errorf("failed to scan permission ID: %w", err)
+		}
+		_, err = tx.Exec(`
+			INSERT INTO role_permissions (role_id, permission_id, created_at, updated_at)
+			VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		`, roleID, permissionID)
+		if err != nil {
+			return 0, fmt.Errorf("failed to assign permission to ADMIN role: %w", err)
+		}
 	}
 
 	// Assign ADMIN role to user

@@ -3,6 +3,7 @@ package rbac
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -104,13 +105,20 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user is ROOT
-	isRoot, err := h.Repo.IsRoot(userID)
+	// Get company ID from URL
+	companyID := chi.URLParam(r, "companyID")
+	if companyID == "" {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationInvalidID))
+		return
+	}
+
+	// Verify user has access to this company
+	hasAccess, err := h.Repo.HasCompanyAccess(userID, companyID)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
 		return
 	}
-	if !isRoot {
+	if !hasAccess {
 		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
 		return
 	}
@@ -126,7 +134,7 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	permission, err := h.Repo.CreatePermission(req.Name, req.Description)
+	permission, err := h.Repo.CreatePermission(req.Name, req.Description, req.RoleID)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCreateFailed))
 		return
@@ -331,7 +339,7 @@ func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
 	utils.JSON(w, http.StatusOK, roles)
 }
 
-// ListPermissions retrieves all permissions
+// ListPermissions retrieves all permissions for a company
 func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 	lang := context.GetLanguage(r.Context())
 
@@ -342,18 +350,31 @@ func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user is ROOT
-	isRoot, err := h.Repo.IsRoot(userID)
+	// Get company ID from URL
+	companyID := chi.URLParam(r, "companyID")
+	if companyID == "" {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationInvalidID))
+		return
+	}
+
+	companyIDInt, err := strconv.ParseInt(companyID, 10, 64)
+	if err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationInvalidID))
+		return
+	}
+
+	// Verify user has access to this company
+	hasAccess, err := h.Repo.HasCompanyAccess(userID, companyID)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
 		return
 	}
-	if !isRoot {
+	if !hasAccess {
 		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
 		return
 	}
 
-	permissions, err := h.Repo.ListPermissions()
+	permissions, err := h.Repo.ListPermissions(companyIDInt)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionListFailed))
 		return
