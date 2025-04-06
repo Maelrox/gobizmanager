@@ -90,7 +90,7 @@ func (h *Handler) createCompany(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	// Create company
-	companyID, err := h.Repo.CreateCompanyWithTx(tx, req.Name, req.Email, req.Phone, req.Address, req.Logo, userID)
+	companyID, err := h.Repo.CreateCompanyWithTx(tx, req.Name, req.Email, req.Phone, req.Address, req.Logo, req.Identifier, userID)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgCompanyCreateFailed))
 		return
