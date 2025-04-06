@@ -375,17 +375,6 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user is ROOT
-	isRoot, err := h.Repo.IsRoot(userID)
-	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
-		return
-	}
-	if !isRoot {
-		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
-		return
-	}
-
 	var req AssignRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
@@ -397,7 +386,52 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.Repo.AssignRole(req.CompanyUserID, req.RoleID)
+	// Get the company user to verify it exists and get the company ID
+	companyUsers, err := h.Repo.GetCompanyUsersByUserID(req.UserID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if len(companyUsers) == 0 {
+		utils.JSONError(w, http.StatusNotFound, h.MsgStore.GetMessage(lang, language.MsgCompanyUserNotFound))
+		return
+	}
+
+	// For now, we'll use the first company user found
+	// TODO: Consider if we need to handle multiple company relationships
+	companyUser := companyUsers[0]
+
+	// Verify the requesting user has access to this company
+	hasAccess, err := h.Repo.HasCompanyAccess(userID, strconv.FormatInt(companyUser.CompanyID, 10))
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !hasAccess {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
+	// Get the role to verify it's not ROOT and belongs to the same company
+	role, err := h.Repo.GetRoleByID(req.RoleID)
+	if err != nil {
+		utils.JSONError(w, http.StatusNotFound, h.MsgStore.GetMessage(lang, language.MsgRoleNotFound))
+		return
+	}
+
+	// Check if role is ROOT
+	if role.Name == "ROOT" {
+		utils.JSONError(w, http.StatusForbidden, "Cannot assign ROOT role")
+		return
+	}
+
+	// Verify role belongs to the same company
+	if role.CompanyID != companyUser.CompanyID {
+		utils.JSONError(w, http.StatusForbidden, "Role does not belong to the company")
+		return
+	}
+
+	_, err = h.Repo.AssignRole(companyUser.ID, req.RoleID)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgRoleAssignFailed))
 		return

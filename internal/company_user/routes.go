@@ -1,12 +1,16 @@
 package company_user
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+)
 
 func Routes(handler *Handler) http.Handler {
-	r := http.NewServeMux()
+	r := chi.NewRouter()
 
 	// Register company user routes
-	r.HandleFunc("/register/company-user", handler.RegisterCompanyUser)
+	r.Post("/register", handler.RegisterCompanyUser)
 
 	return r
 }

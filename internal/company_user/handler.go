@@ -42,7 +42,7 @@ func (h *Handler) RegisterCompanyUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user has manage_users permission
-	moduleActionID, err := h.RBACRepo.GetModuleActionID("user", "manage")
+	moduleActionID, err := h.RBACRepo.GetModuleActionID("user", "create")
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.permission_check_failed"))
 		return

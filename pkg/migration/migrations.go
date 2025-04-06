@@ -165,6 +165,10 @@ var migrations = []struct {
 			INSERT OR IGNORE INTO roles (id, company_id, name, description, created_at, updated_at)
 			VALUES (1, NULL, 'ROOT', 'System ROOT user with full access', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
+			-- Create USER role (with NULL company_id for system-wide access)
+			INSERT OR IGNORE INTO roles (id, company_id, name, description, created_at, updated_at)
+			VALUES (2, NULL, 'USER', 'Basic user role with limited access', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
 			-- Create default permissions
 			INSERT OR IGNORE INTO permissions (id, name, description, created_at, updated_at)
 			VALUES 

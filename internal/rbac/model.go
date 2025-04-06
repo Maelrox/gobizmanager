@@ -90,8 +90,8 @@ type RemovePermissionRequest struct {
 }
 
 type AssignRoleRequest struct {
-	CompanyUserID int64 `json:"company_user_id" validate:"required"`
-	RoleID        int64 `json:"role_id" validate:"required"`
+	UserID int64 `json:"user_id" validate:"required"`
+	RoleID int64 `json:"role_id" validate:"required"`
 }
 
 type RootGroup struct {

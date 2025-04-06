@@ -13,6 +13,7 @@ import (
 
 	"gobizmanager/internal/auth"
 	"gobizmanager/internal/company"
+	"gobizmanager/internal/company_user"
 	"gobizmanager/internal/rbac"
 	"gobizmanager/internal/role"
 	"gobizmanager/internal/role/permission"
@@ -60,11 +61,13 @@ func main() {
 	companyRepo := company.NewRepository(db, cfg, rbacRepo)
 	roleRepo := role.NewRepository(db)
 	permissionRepo := permission.NewRepository(db)
+	companyUserRepo := company_user.NewRepository(db, cfg)
 
 	// Initialize handlers
 	authHandler := auth.NewHandler(userRepo, jwtManager, msgStore)
 	companyHandler := company.NewHandler(companyRepo, rbacRepo, userRepo, roleRepo, permissionRepo, msgStore)
 	rbacHandler := rbac.NewHandler(rbacRepo, msgStore)
+	companyUserHandler := company_user.NewHandler(companyUserRepo, rbacRepo, msgStore)
 
 	// Create router
 	r := chi.NewRouter()
@@ -87,6 +90,7 @@ func main() {
 		r.Use(auth.Middleware(jwtManager, msgStore))
 		r.Mount("/companies", company.Routes(companyHandler, msgStore))
 		r.Mount("/rbac", rbac.Routes(rbacHandler))
+		r.Mount("/company-users", company_user.Routes(companyUserHandler))
 	})
 
 	// Start server

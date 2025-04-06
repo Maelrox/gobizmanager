@@ -52,6 +52,7 @@ const (
 	MsgCompanyLogoUpdated        = "company.logo_updated"
 	MsgCompanyUpdated            = "company.updated"
 	MsgCompanyDeleted            = "company.deleted"
+	MsgCompanyUserNotFound       = "company.user_not_found"
 
 	// Permission messages
 	MsgPermissionDenied       = "permission.denied"
@@ -148,6 +149,7 @@ func NewMessageStore() *MessageStore {
 		MsgCompanyLogoUpdated:        "Company logo updated successfully",
 		MsgCompanyUpdated:            "Company updated successfully",
 		MsgCompanyDeleted:            "Company deleted successfully",
+		MsgCompanyUserNotFound:       "Company user not found",
 
 		// Permission messages
 		MsgPermissionDenied:       "Insufficient permissions",
@@ -232,6 +234,7 @@ func NewMessageStore() *MessageStore {
 		MsgCompanyLogoUpdated:        "Logo de la empresa actualizado exitosamente",
 		MsgCompanyUpdated:            "Empresa actualizada exitosamente",
 		MsgCompanyDeleted:            "Empresa eliminada exitosamente",
+		MsgCompanyUserNotFound:       "Usuario de empresa no encontrado",
 
 		// Permission messages
 		MsgPermissionDenied:       "Permisos insuficientes",
