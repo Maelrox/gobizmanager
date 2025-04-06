@@ -3,7 +3,6 @@ package rbac
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -40,19 +39,14 @@ func (h *Handler) RequirePermission(moduleName, actionName string) func(http.Han
 				return
 			}
 
-			companyIDStr := chi.URLParam(r, "companyID")
-			if companyIDStr == "" {
-				utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "company.company_id_required"))
-				return
-			}
-
-			companyID, err := strconv.ParseInt(companyIDStr, 10, 64)
+			// Get module action ID
+			moduleActionID, err := h.Repo.GetModuleActionID(moduleName, actionName)
 			if err != nil {
-				utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "company.invalid_company_id"))
+				utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.permission_check_failed"))
 				return
 			}
 
-			hasPermission, err := h.Repo.HasPermission(userID, companyID, moduleName, actionName)
+			hasPermission, err := h.Repo.HasPermission(userID, moduleActionID)
 			if err != nil {
 				utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.permission_check_failed"))
 				return

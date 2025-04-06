@@ -89,13 +89,37 @@ var migrations = []struct {
 		name: "Create permissions table",
 		stmt: `CREATE TABLE IF NOT EXISTS permissions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			role_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			description TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(name)
+		)`,
+	},
+	{
+		name: "Create permission_module_actions table",
+		stmt: `CREATE TABLE IF NOT EXISTS permission_module_actions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			permission_id INTEGER NOT NULL,
 			module_action_id INTEGER NOT NULL,
-			created_at TIMESTAMP,
-			updated_at TIMESTAMP,
-			FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
 			FOREIGN KEY (module_action_id) REFERENCES module_actions(id) ON DELETE CASCADE,
-			UNIQUE(role_id, module_action_id)
+			UNIQUE(permission_id, module_action_id)
+		)`,
+	},
+	{
+		name: "Create role_permissions table",
+		stmt: `CREATE TABLE IF NOT EXISTS role_permissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			role_id INTEGER NOT NULL,
+			permission_id INTEGER NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+			FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
+			UNIQUE(role_id, permission_id)
 		)`,
 	},
 	{
@@ -141,10 +165,35 @@ var migrations = []struct {
 			INSERT OR IGNORE INTO roles (id, company_id, name, description, created_at, updated_at)
 			VALUES (1, NULL, 'ROOT', 'System ROOT user with full access', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-			-- Grant all permissions to ROOT role
-			INSERT OR IGNORE INTO permissions (role_id, module_action_id, created_at, updated_at)
+			-- Create default permissions
+			INSERT OR IGNORE INTO permissions (id, name, description, created_at, updated_at)
+			VALUES 
+				(1, 'manage_companies', 'Full access to company management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(2, 'manage_users', 'Full access to user management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(3, 'manage_roles', 'Full access to role management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+			-- Add module actions to permissions
+			INSERT OR IGNORE INTO permission_module_actions (permission_id, module_action_id, created_at, updated_at)
 			SELECT 1, id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-			FROM module_actions;
+			FROM module_actions
+			WHERE module_id = 1;
+
+			INSERT OR IGNORE INTO permission_module_actions (permission_id, module_action_id, created_at, updated_at)
+			SELECT 2, id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+			FROM module_actions
+			WHERE module_id = 2;
+
+			INSERT OR IGNORE INTO permission_module_actions (permission_id, module_action_id, created_at, updated_at)
+			SELECT 3, id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+			FROM module_actions
+			WHERE module_id = 3;
+
+			-- Grant all permissions to ROOT role
+			INSERT OR IGNORE INTO role_permissions (role_id, permission_id, created_at, updated_at)
+			VALUES 
+				(1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(1, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(1, 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 		`,
 	},
 }

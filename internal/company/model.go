@@ -11,8 +11,8 @@ import (
 type Company struct {
 	ID         int64          `json:"id"`
 	Name       string         `json:"name"`
-	Phone      string         `json:"phone" encrypted:"true"`
 	Email      string         `json:"email" encrypted:"true"`
+	Phone      string         `json:"phone" encrypted:"true"`
 	Address    string         `json:"address" encrypted:"true"`
 	Identifier string         `json:"identifier"`
 	Logo       sql.NullString `json:"logo"`
@@ -49,31 +49,17 @@ func (c *Company) EncryptSensitiveFields(key string) error {
 	return nil
 }
 
-// DecryptSensitiveFields decrypts sensitive fields using the provided key
+// DecryptSensitiveFields decrypts the encrypted fields of the company
 func (c *Company) DecryptSensitiveFields(key string) error {
-	if c.Phone != "" {
-		decrypted, err := encryption.Decrypt(c.Phone, key)
-		if err != nil {
-			return fmt.Errorf("failed to decrypt phone: %w", err)
-		}
-		c.Phone = decrypted
+	var err error
+	if c.Email, err = encryption.Decrypt(c.Email, key); err != nil {
+		return fmt.Errorf("failed to decrypt email: %w", err)
 	}
-
-	if c.Email != "" {
-		decrypted, err := encryption.Decrypt(c.Email, key)
-		if err != nil {
-			return fmt.Errorf("failed to decrypt email: %w", err)
-		}
-		c.Email = decrypted
+	if c.Phone, err = encryption.Decrypt(c.Phone, key); err != nil {
+		return fmt.Errorf("failed to decrypt phone: %w", err)
 	}
-
-	if c.Address != "" {
-		decrypted, err := encryption.Decrypt(c.Address, key)
-		if err != nil {
-			return fmt.Errorf("failed to decrypt address: %w", err)
-		}
-		c.Address = decrypted
+	if c.Address, err = encryption.Decrypt(c.Address, key); err != nil {
+		return fmt.Errorf("failed to decrypt address: %w", err)
 	}
-
 	return nil
 }

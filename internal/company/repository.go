@@ -22,14 +22,15 @@ func NewRepository(db *sql.DB, cfg *config.Config, rbacRepo *rbac.Repository) *R
 	}
 }
 
-func (r *Repository) CreateCompanyWithTx(tx *sql.Tx, name, email, phone, address, logo string, userID int64) (int64, error) {
+func (r *Repository) CreateCompanyWithTx(tx *sql.Tx, name, email, phone, address, logo, identifier string, userID int64) (int64, error) {
 	// Create temporary company to handle encryption
 	company := &Company{
-		Name:    name,
-		Email:   email,
-		Phone:   phone,
-		Address: address,
-		Logo:    sql.NullString{String: logo, Valid: logo != ""},
+		Name:       name,
+		Email:      email,
+		Phone:      phone,
+		Address:    address,
+		Logo:       sql.NullString{String: logo, Valid: logo != ""},
+		Identifier: identifier,
 	}
 
 	// Encrypt sensitive fields
@@ -39,9 +40,9 @@ func (r *Repository) CreateCompanyWithTx(tx *sql.Tx, name, email, phone, address
 
 	// Create company
 	result, err := tx.Exec(`
-		INSERT INTO companies (name, email, phone, address, logo, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-	`, company.Name, company.Email, company.Phone, company.Address, company.Logo)
+		INSERT INTO companies (name, email, phone, address, logo, identifier, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, company.Name, company.Email, company.Phone, company.Address, company.Logo, company.Identifier)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create company: %w", err)
 	}
@@ -179,15 +180,22 @@ func (r *Repository) ListCompanies() ([]Company, error) {
 	for rows.Next() {
 		var c Company
 		if err := rows.Scan(
-			&c.ID, &c.Name, &c.Phone, &c.Email,
-			&c.Identifier, &c.Logo, &c.CreatedAt, &c.UpdatedAt,
+			&c.ID,
+			&c.Name,
+			&c.Email,
+			&c.Phone,
+			&c.Address,
+			&c.Identifier,
+			&c.Logo,
+			&c.CreatedAt,
+			&c.UpdatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan company: %w", err)
 		}
 
 		// Decrypt sensitive fields
 		if err := c.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to decrypt company fields: %w", err)
 		}
 
 		companies = append(companies, c)
@@ -213,8 +221,15 @@ func (r *Repository) ListCompaniesForUser(userID int64) ([]Company, error) {
 	for rows.Next() {
 		var c Company
 		if err := rows.Scan(
-			&c.ID, &c.Name, &c.Phone, &c.Email,
-			&c.Identifier, &c.Logo, &c.CreatedAt, &c.UpdatedAt,
+			&c.ID,
+			&c.Name,
+			&c.Email,
+			&c.Phone,
+			&c.Address,
+			&c.Identifier,
+			&c.Logo,
+			&c.CreatedAt,
+			&c.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan company: %w", err)
 		}

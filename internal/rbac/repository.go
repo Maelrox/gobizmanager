@@ -3,6 +3,7 @@ package rbac
 import (
 	"database/sql"
 	"fmt"
+	"gobizmanager/internal/permission"
 	"strconv"
 	"time"
 )
@@ -198,25 +199,47 @@ func (r *Repository) GetModuleActionByID(id int64) (*ModuleAction, error) {
 	return &action, nil
 }
 
-// HasPermission checks if a user has a specific permission for a company
-func (r *Repository) HasPermission(userID, companyID int64, moduleName, actionName string) (bool, error) {
-	var hasPermission bool
-	query := `
-		SELECT EXISTS (
-			SELECT 1 FROM role_permissions rp
-			JOIN roles r ON rp.role_id = r.id
-			JOIN permissions p ON rp.permission_id = p.id
-			JOIN company_users cu ON r.id = cu.role_id
-			WHERE cu.user_id = ? 
-			AND cu.company_id = ?
-			AND p.module = ?
-			AND p.action = ?
-		)`
-	err := r.db.QueryRow(query, userID, companyID, moduleName, actionName).Scan(&hasPermission)
+// HasPermission checks if a user has a specific permission
+func (r *Repository) HasPermission(userID, moduleActionID int64) (bool, error) {
+	var count int
+	err := r.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM user_roles ur
+		JOIN role_permissions rp ON ur.role_id = rp.role_id
+		JOIN permission_module_actions pma ON rp.permission_id = pma.permission_id
+		WHERE ur.user_id = ? AND pma.module_action_id = ?
+	`, userID, moduleActionID).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check permission: %w", err)
 	}
-	return hasPermission, nil
+
+	return count > 0, nil
+}
+
+// GetUserPermissions returns all permissions for a user
+func (r *Repository) GetUserPermissions(userID int64) ([]permission.Permission, error) {
+	rows, err := r.db.Query(`
+		SELECT DISTINCT p.id, p.name, p.description, p.created_at, p.updated_at
+		FROM permissions p
+		JOIN role_permissions rp ON p.id = rp.permission_id
+		JOIN user_roles ur ON rp.role_id = ur.role_id
+		WHERE ur.user_id = ?
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user permissions: %w", err)
+	}
+	defer rows.Close()
+
+	var permissions []permission.Permission
+	for rows.Next() {
+		var p permission.Permission
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan permission: %w", err)
+		}
+		permissions = append(permissions, p)
+	}
+
+	return permissions, nil
 }
 
 func (r *Repository) DeleteCompanyUsersWithTx(tx *sql.Tx, companyID int64) error {
@@ -478,4 +501,19 @@ func (r *Repository) RemovePermissionFromRole(roleID, permissionID string) error
 		WHERE role_id = ? AND module_action_id = ?
 	`, roleID, permissionID)
 	return err
+}
+
+// GetModuleActionID returns the ID of a module action by module name and action name
+func (r *Repository) GetModuleActionID(moduleName, actionName string) (int64, error) {
+	var id int64
+	err := r.db.QueryRow(`
+		SELECT ma.id
+		FROM module_actions ma
+		JOIN modules m ON ma.module_id = m.id
+		WHERE m.name = ? AND ma.name = ?
+	`, moduleName, actionName).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get module action ID: %w", err)
+	}
+	return id, nil
 }
