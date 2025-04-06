@@ -63,37 +63,6 @@ func (h *Handler) RequirePermission(moduleName, actionName string) func(http.Han
 	}
 }
 
-// Create company user
-func (h *Handler) CreateCompanyUser(w http.ResponseWriter, r *http.Request) {
-	lang := context.GetLanguage(r.Context())
-
-	var req CreateCompanyUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.invalid_request"))
-		return
-	}
-
-	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.validation_failed"))
-		return
-	}
-
-	// Check if user is already associated with the company
-	_, err := h.Repo.GetCompanyUserByCompanyAndUser(req.CompanyID, req.UserID)
-	if err == nil {
-		utils.JSONError(w, http.StatusConflict, h.MsgStore.GetMessage(lang, "rbac.user_already_associated"))
-		return
-	}
-
-	id, err := h.Repo.CreateCompanyUser(req.CompanyID, req.UserID, req.IsMain)
-	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.create_company_user_failed"))
-		return
-	}
-
-	utils.JSON(w, http.StatusCreated, map[string]int64{"id": id})
-}
-
 // CreatePermission creates a new permission
 func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 	lang := context.GetLanguage(r.Context())
@@ -131,6 +100,18 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.Validator.Struct(req); err != nil {
 		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	// Check if the target role is ROOT
+	role, err := h.Repo.GetRoleByID(req.RoleID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCreateFailed))
+		return
+	}
+
+	if role.Name == "ROOT" {
+		utils.JSONError(w, http.StatusForbidden, "Cannot add permissions to ROOT role")
 		return
 	}
 

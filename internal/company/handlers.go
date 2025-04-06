@@ -10,9 +10,9 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"gobizmanager/internal/auth"
-	"gobizmanager/internal/permission"
 	"gobizmanager/internal/rbac"
 	"gobizmanager/internal/role"
+	"gobizmanager/internal/role/permission"
 	"gobizmanager/internal/user"
 	"gobizmanager/pkg/context"
 	"gobizmanager/pkg/language"

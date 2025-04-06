@@ -2,9 +2,9 @@ package company
 
 import (
 	"database/sql"
-	"gobizmanager/internal/permission"
 	"gobizmanager/internal/rbac"
 	"gobizmanager/internal/role"
+	"gobizmanager/internal/role/permission"
 )
 
 // CreateCompanyWithAdmin creates a new company and sets up the admin role and permissions

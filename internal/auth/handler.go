@@ -9,10 +9,10 @@ import (
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
 
-	"gobizmanager/internal/logger"
 	"gobizmanager/internal/user"
 	"gobizmanager/pkg/context"
 	"gobizmanager/pkg/language"
+	"gobizmanager/pkg/logger"
 	"gobizmanager/pkg/utils"
 )
 

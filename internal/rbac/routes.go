@@ -9,9 +9,6 @@ import (
 func Routes(handler *Handler) http.Handler {
 	r := chi.NewRouter()
 
-	// Company user routes
-	r.Post("/company-users", handler.CreateCompanyUser)
-
 	// Role routes
 	r.Route("/roles", func(r chi.Router) {
 		r.Post("/", handler.CreateRole)
@@ -21,8 +18,8 @@ func Routes(handler *Handler) http.Handler {
 
 	// Permission routes
 	r.Route("/permissions", func(r chi.Router) {
-		r.Post("/", handler.CreatePermission)
-		r.Get("/", handler.ListPermissions)
+		r.Post("/{companyID}", handler.CreatePermission)
+		r.Get("/{companyID}", handler.ListPermissions)
 	})
 
 	// Role-Permission association routes

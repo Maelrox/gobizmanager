@@ -3,7 +3,7 @@ package rbac
 import (
 	"database/sql"
 	"fmt"
-	"gobizmanager/internal/permission"
+	"gobizmanager/internal/role/permission"
 	"strconv"
 	"time"
 )
@@ -95,21 +95,25 @@ func (r *Repository) CreateRole(companyID int64, name, description string) (int6
 
 func (r *Repository) GetRoleByID(id int64) (*Role, error) {
 	var role Role
+	var companyID sql.NullInt64
 	err := r.db.QueryRow(
 		"SELECT id, company_id, name, description, created_at, updated_at FROM roles WHERE id = ?",
 		id,
-	).Scan(&role.ID, &role.CompanyID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt)
+	).Scan(&role.ID, &companyID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt)
 	if err != nil {
 		return nil, err
+	}
+	if companyID.Valid {
+		role.CompanyID = companyID.Int64
 	}
 	return &role, nil
 }
 
 // Permission operations
-func (r *Repository) CreatePermission(name, description string, roleID int64) (int64, error) {
+func (r *Repository) CreatePermission(name, description string, roleID int64) (*Permission, error) {
 	tx, err := r.db.Begin()
 	if err != nil {
-		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -119,12 +123,12 @@ func (r *Repository) CreatePermission(name, description string, roleID int64) (i
 		VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 	`, name, description)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create permission: %w", err)
+		return nil, fmt.Errorf("failed to create permission: %w", err)
 	}
 
 	permissionID, err := result.LastInsertId()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get permission ID: %w", err)
+		return nil, fmt.Errorf("failed to get permission ID: %w", err)
 	}
 
 	// Associate permission with role
@@ -133,14 +137,23 @@ func (r *Repository) CreatePermission(name, description string, roleID int64) (i
 		VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 	`, roleID, permissionID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to associate permission with role: %w", err)
+		return nil, fmt.Errorf("failed to associate permission with role: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return permissionID, nil
+	// Return the full permission object
+	permission := &Permission{
+		ID:          permissionID,
+		Name:        name,
+		Description: description,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	return permission, nil
 }
 
 func (r *Repository) GetPermissionsByRoleID(roleID int64) ([]Permission, error) {
