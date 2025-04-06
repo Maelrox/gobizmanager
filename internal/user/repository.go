@@ -2,9 +2,10 @@
 package user
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"fmt"
 
-	"gobizmanager/pkg/encryption"
 	"gobizmanager/platform/config"
 	"time"
 )
@@ -19,16 +20,31 @@ func NewRepository(db *sql.DB, cfg *config.Config) *Repository {
 }
 
 // CreateUserWithTx creates a new user within a transaction
-func (r *Repository) CreateUserWithTx(tx *sql.Tx, username, password string) (int64, error) {
+func (r *Repository) CreateUserWithTx(tx *sql.Tx, username, password, phone string) (int64, error) {
 	hashedPassword, err := HashPassword(password)
 	if err != nil {
 		return 0, err
 	}
 
+	// Create a temporary user to encrypt fields
+	user := &User{
+		Email:    username,
+		Password: hashedPassword,
+		Phone:    phone,
+	}
+
+	// Encrypt sensitive fields
+	if err := user.EncryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
+		return 0, err
+	}
+
+	// Create email hash for searching
+	emailHash := fmt.Sprintf("%x", sha256.Sum256([]byte(username)))
+
 	now := time.Now()
 	result, err := tx.Exec(
-		"INSERT INTO users (email, password, created_at, updated_at) VALUES (?, ?, ?, ?)",
-		username, hashedPassword, now, now,
+		"INSERT INTO users (email, email_hash, password, phone, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		user.Email, emailHash, user.Password, user.Phone, now, now,
 	)
 	if err != nil {
 		return 0, err
@@ -60,22 +76,27 @@ func (r *Repository) GetUserByID(id int64) (*User, error) {
 
 // GetUserByEmail returns a user by email
 func (r *Repository) GetUserByEmail(email string) (*User, error) {
-	// Encrypt the email for comparison
-	encryptedEmail, err := encryption.Encrypt(email, r.cfg.EncryptionKey)
-	if err != nil {
-		return nil, err
-	}
+	// Create email hash for searching
+	emailHash := fmt.Sprintf("%x", sha256.Sum256([]byte(email)))
 
 	user := &User{}
-	err = r.db.QueryRow(`
+	var phone sql.NullString
+	err := r.db.QueryRow(`
 		SELECT id, email, password, phone, created_at, updated_at 
-		FROM users WHERE email = ?
-	`, encryptedEmail).Scan(
-		&user.ID, &user.Email, &user.Password, &user.Phone,
+		FROM users WHERE email_hash = ?
+	`, emailHash).Scan(
+		&user.ID, &user.Email, &user.Password, &phone,
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	// Handle nullable phone
+	if phone.Valid {
+		user.Phone = phone.String
+	} else {
+		user.Phone = ""
 	}
 
 	// Decrypt sensitive fields
@@ -170,7 +191,7 @@ func (r *Repository) RegisterRootUser(username, password string) (int64, error) 
 	}
 
 	// Create user
-	userID, err := r.CreateUserWithTx(tx, username, password)
+	userID, err := r.CreateUserWithTx(tx, username, password, "")
 	if err != nil {
 		return 0, err
 	}
@@ -198,7 +219,7 @@ func (r *Repository) RegisterUser(username, password string) (int64, error) {
 	defer tx.Rollback()
 
 	// Create user
-	userID, err := r.CreateUserWithTx(tx, username, password)
+	userID, err := r.CreateUserWithTx(tx, username, password, "")
 	if err != nil {
 		return 0, err
 	}

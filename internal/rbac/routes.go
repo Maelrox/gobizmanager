@@ -13,15 +13,22 @@ func Routes(handler *Handler) http.Handler {
 	r.Post("/company-users", handler.CreateCompanyUser)
 
 	// Role routes
-	r.Group(func(r chi.Router) {
-		r.Use(handler.RequirePermission(ModuleRole, ActionCreate))
-		r.Post("/roles", handler.CreateRole)
+	r.Route("/roles", func(r chi.Router) {
+		r.Post("/", handler.CreateRole)
+		r.Get("/", handler.ListRoles)
+		r.Get("/{id}", handler.GetRole)
 	})
 
 	// Permission routes
-	r.Group(func(r chi.Router) {
-		r.Use(handler.RequirePermission(ModuleRole, ActionCreate))
-		r.Post("/permissions", handler.CreatePermission)
+	r.Route("/permissions", func(r chi.Router) {
+		r.Post("/", handler.CreatePermission)
+		r.Get("/", handler.ListPermissions)
+	})
+
+	// Role-Permission association routes
+	r.Route("/role-permissions", func(r chi.Router) {
+		r.Post("/assign", handler.AssignPermission)
+		r.Post("/remove", handler.RemovePermission)
 	})
 
 	// User role assignment routes

@@ -99,74 +99,315 @@ func (h *Handler) CreateCompanyUser(w http.ResponseWriter, r *http.Request) {
 	utils.JSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
-// Create role
-func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
-	lang := context.GetLanguage(r.Context())
-
-	var req CreateRoleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.invalid_request"))
-		return
-	}
-
-	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.validation_failed"))
-		return
-	}
-
-	id, err := h.Repo.CreateRole(req.CompanyID, req.Name, req.Description)
-	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.create_role_failed"))
-		return
-	}
-
-	utils.JSON(w, http.StatusCreated, map[string]int64{"id": id})
-}
-
-// Create permission
+// CreatePermission creates a new permission
 func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 	lang := context.GetLanguage(r.Context())
 
+	// Get user ID from context
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
+		return
+	}
+
+	// Check if user is ROOT
+	isRoot, err := h.Repo.IsRoot(userID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !isRoot {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
 	var req CreatePermissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.invalid_request"))
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
 		return
 	}
 
 	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.validation_failed"))
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
 		return
 	}
 
-	id, err := h.Repo.CreatePermission(req.RoleID, req.ModuleActionID)
+	permission, err := h.Repo.CreatePermission(req.Name, req.Description)
 	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.create_permission_failed"))
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCreateFailed))
 		return
 	}
 
-	utils.JSON(w, http.StatusCreated, map[string]int64{"id": id})
+	utils.JSON(w, http.StatusCreated, permission)
 }
 
-// Assign role to user
+// CreateRole creates a new role with permissions
+func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
+	lang := context.GetLanguage(r.Context())
+
+	// Get user ID from context
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
+		return
+	}
+
+	// Check if user is ROOT
+	isRoot, err := h.Repo.IsRoot(userID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !isRoot {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
+	var req CreateRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	if err := h.Validator.Struct(req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	role, err := h.Repo.CreateRoleWithPermissions(req.Name, req.Description, req.Permissions)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgRoleCreateFailed))
+		return
+	}
+
+	utils.JSON(w, http.StatusCreated, role)
+}
+
+// AssignPermission assigns a permission to a role
+func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
+	lang := context.GetLanguage(r.Context())
+
+	// Get user ID from context
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
+		return
+	}
+
+	// Check if user is ROOT
+	isRoot, err := h.Repo.IsRoot(userID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !isRoot {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
+	var req AssignPermissionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	if err := h.Validator.Struct(req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	if err := h.Repo.AssignPermissionToRole(req.RoleID, req.PermissionID); err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionAssignFailed))
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, map[string]interface{}{
+		"message": h.MsgStore.GetMessage(lang, language.MsgPermissionAssigned),
+	})
+}
+
+// RemovePermission removes a permission from a role
+func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
+	lang := context.GetLanguage(r.Context())
+
+	// Get user ID from context
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
+		return
+	}
+
+	// Check if user is ROOT
+	isRoot, err := h.Repo.IsRoot(userID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !isRoot {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
+	var req RemovePermissionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	if err := h.Validator.Struct(req); err != nil {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		return
+	}
+
+	if err := h.Repo.RemovePermissionFromRole(req.RoleID, req.PermissionID); err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionRemoveFailed))
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, map[string]interface{}{
+		"message": h.MsgStore.GetMessage(lang, language.MsgPermissionRemoved),
+	})
+}
+
+// GetRole retrieves a role with its permissions
+func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
+	lang := context.GetLanguage(r.Context())
+
+	// Get user ID from context
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
+		return
+	}
+
+	// Check if user is ROOT
+	isRoot, err := h.Repo.IsRoot(userID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !isRoot {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
+	roleID := chi.URLParam(r, "id")
+	if roleID == "" {
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationInvalidID))
+		return
+	}
+
+	role, err := h.Repo.GetRoleWithPermissions(roleID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgRoleNotFound))
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, role)
+}
+
+// ListRoles retrieves all roles with their permissions
+func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
+	lang := context.GetLanguage(r.Context())
+
+	// Get user ID from context
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
+		return
+	}
+
+	// Check if user is ROOT
+	isRoot, err := h.Repo.IsRoot(userID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !isRoot {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
+	roles, err := h.Repo.ListRolesWithPermissions()
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgRoleListFailed))
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, roles)
+}
+
+// ListPermissions retrieves all permissions
+func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
+	lang := context.GetLanguage(r.Context())
+
+	// Get user ID from context
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
+		return
+	}
+
+	// Check if user is ROOT
+	isRoot, err := h.Repo.IsRoot(userID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !isRoot {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
+	permissions, err := h.Repo.ListPermissions()
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionListFailed))
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, permissions)
+}
+
+// AssignRole assigns a role to a company user
 func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 	lang := context.GetLanguage(r.Context())
 
+	// Get user ID from context
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
+		return
+	}
+
+	// Check if user is ROOT
+	isRoot, err := h.Repo.IsRoot(userID)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !isRoot {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
 	var req AssignRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.invalid_request"))
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
 		return
 	}
 
 	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.validation_failed"))
+		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
 		return
 	}
 
-	id, err := h.Repo.AssignRole(req.CompanyUserID, req.RoleID)
+	_, err = h.Repo.AssignRole(req.CompanyUserID, req.RoleID)
 	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.assign_role_failed"))
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgRoleAssignFailed))
 		return
 	}
 
-	utils.JSON(w, http.StatusCreated, map[string]int64{"id": id})
+	utils.JSON(w, http.StatusOK, map[string]interface{}{
+		"message": h.MsgStore.GetMessage(lang, language.MsgRoleAssigned),
+	})
 }

@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"database/sql"
+	"strconv"
 	"time"
 )
 
@@ -103,11 +104,11 @@ func (r *Repository) GetRoleByID(id int64) (*Role, error) {
 }
 
 // Permission operations
-func (r *Repository) CreatePermission(roleID, moduleActionID int64) (int64, error) {
+func (r *Repository) CreatePermission(name, description string) (int64, error) {
 	now := time.Now()
 	result, err := r.db.Exec(
-		"INSERT INTO permissions (role_id, module_action_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
-		roleID, moduleActionID, now, now,
+		"INSERT INTO permissions (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)",
+		name, description, now, now,
 	)
 	if err != nil {
 		return 0, err
@@ -308,4 +309,178 @@ func (r *Repository) HasCompanyAccess(userID int64, companyID string) (bool, err
 		)
 	`, userID, companyID).Scan(&exists)
 	return exists, err
+}
+
+// IsRoot checks if the user has the ROOT role
+func (r *Repository) IsRoot(userID int64) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM user_roles ur
+			JOIN roles r ON ur.role_id = r.id
+			WHERE ur.user_id = ? AND r.name = 'ROOT' AND r.company_id IS NULL
+		)
+	`
+	var isRoot bool
+	err := r.db.QueryRow(query, userID).Scan(&isRoot)
+	return isRoot, err
+}
+
+// CreateRoleWithPermissions creates a new role with permissions
+func (r *Repository) CreateRoleWithPermissions(name, description string, permissions []string) (*Role, error) {
+	now := time.Now()
+	result, err := r.db.Exec(
+		"INSERT INTO roles (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)",
+		name, description, now, now,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	roleID, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	role := &Role{
+		ID:          strconv.FormatInt(roleID, 10),
+		Name:        name,
+		Description: description,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	return role, nil
+}
+
+// AssignPermissionToRole assigns a permission to a role
+func (r *Repository) AssignPermissionToRole(roleID, permissionID string) error {
+	now := time.Now()
+	_, err := r.db.Exec(
+		"INSERT INTO permissions (role_id, module_action_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
+		roleID, permissionID, now, now,
+	)
+	return err
+}
+
+// GetRoleWithPermissions returns a role with its permissions
+func (r *Repository) GetRoleWithPermissions(roleID string) (*Role, error) {
+	// Convert string ID to int64
+	id, err := strconv.ParseInt(roleID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get role details
+	role := &Role{}
+	err = r.db.QueryRow(`
+		SELECT id, company_id, name, description, created_at, updated_at 
+		FROM roles WHERE id = ?
+	`, id).Scan(
+		&role.ID, &role.CompanyID, &role.Name, &role.Description,
+		&role.CreatedAt, &role.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get permissions for the role
+	rows, err := r.db.Query(`
+		SELECT p.id, p.role_id, p.module_action_id, p.created_at, p.updated_at,
+		       ma.name, ma.description
+		FROM permissions p
+		JOIN module_actions ma ON p.module_action_id = ma.id
+		WHERE p.role_id = ?
+	`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var permissions []Permission
+	for rows.Next() {
+		var p Permission
+		if err := rows.Scan(
+			&p.ID, &p.RoleID, &p.ModuleActionID, &p.CreatedAt, &p.UpdatedAt,
+			&p.Name, &p.Description,
+		); err != nil {
+			return nil, err
+		}
+		permissions = append(permissions, p)
+	}
+	role.Permissions = permissions
+
+	return role, nil
+}
+
+// ListPermissions returns all permissions
+func (r *Repository) ListPermissions() ([]Permission, error) {
+	rows, err := r.db.Query(`
+		SELECT p.id, p.role_id, p.module_action_id, p.created_at, p.updated_at,
+		       ma.name, ma.description
+		FROM permissions p
+		JOIN module_actions ma ON p.module_action_id = ma.id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var permissions []Permission
+	for rows.Next() {
+		var p Permission
+		if err := rows.Scan(
+			&p.ID, &p.RoleID, &p.ModuleActionID, &p.CreatedAt, &p.UpdatedAt,
+			&p.Name, &p.Description,
+		); err != nil {
+			return nil, err
+		}
+		permissions = append(permissions, p)
+	}
+	return permissions, nil
+}
+
+// ListRolesWithPermissions returns all roles with their permissions
+func (r *Repository) ListRolesWithPermissions() ([]Role, error) {
+	// Get all roles
+	rows, err := r.db.Query(`
+		SELECT id, company_id, name, description, created_at, updated_at 
+		FROM roles
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var roles []Role
+	for rows.Next() {
+		var role Role
+		if err := rows.Scan(
+			&role.ID, &role.CompanyID, &role.Name, &role.Description,
+			&role.CreatedAt, &role.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		roles = append(roles, role)
+	}
+
+	// Get permissions for each role
+	for i := range roles {
+		id, _ := strconv.ParseInt(roles[i].ID, 10, 64)
+		permissions, err := r.GetPermissionsByRoleID(id)
+		if err != nil {
+			return nil, err
+		}
+		roles[i].Permissions = permissions
+	}
+
+	return roles, nil
+}
+
+// RemovePermissionFromRole removes a permission from a role
+func (r *Repository) RemovePermissionFromRole(roleID, permissionID string) error {
+	_, err := r.db.Exec(`
+		DELETE FROM permissions 
+		WHERE role_id = ? AND module_action_id = ?
+	`, roleID, permissionID)
+	return err
 }

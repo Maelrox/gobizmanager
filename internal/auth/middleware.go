@@ -21,13 +21,13 @@ func Middleware(jwtManager *JWTManager, msgStore *language.MessageStore) func(ht
 
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				utils.JSONError(w, http.StatusUnauthorized, msgStore.GetMessage(lang, "auth.authorization_required"))
+				utils.JSONError(w, http.StatusUnauthorized, msgStore.GetMessage(lang, language.MsgAuthHeaderRequired))
 				return
 			}
 
 			parts := strings.Split(authHeader, " ")
 			if len(parts) != 2 || parts[0] != "Bearer" {
-				utils.JSONError(w, http.StatusUnauthorized, msgStore.GetMessage(lang, "auth.invalid_authorization_format"))
+				utils.JSONError(w, http.StatusUnauthorized, msgStore.GetMessage(lang, language.MsgAuthInvalidFormat))
 				return
 			}
 
@@ -35,9 +35,9 @@ func Middleware(jwtManager *JWTManager, msgStore *language.MessageStore) func(ht
 			claims, err := jwtManager.VerifyToken(tokenString)
 			if err != nil {
 				if err == ErrExpiredToken {
-					utils.JSONError(w, http.StatusUnauthorized, msgStore.GetMessage(lang, "auth.token_expired"))
+					utils.JSONError(w, http.StatusUnauthorized, msgStore.GetMessage(lang, language.MsgAuthTokenExpired))
 				} else {
-					utils.JSONError(w, http.StatusUnauthorized, msgStore.GetMessage(lang, "auth.invalid_token"))
+					utils.JSONError(w, http.StatusUnauthorized, msgStore.GetMessage(lang, language.MsgAuthInvalidToken))
 				}
 				return
 			}

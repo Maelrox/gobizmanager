@@ -28,21 +28,26 @@ type ModuleAction struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-type Role struct {
-	ID          int64     `json:"id"`
-	CompanyID   int64     `json:"company_id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
+// Permission represents a system permission
 type Permission struct {
-	ID             int64     `json:"id"`
+	ID             string    `json:"id"`
 	RoleID         int64     `json:"role_id"`
 	ModuleActionID int64     `json:"module_action_id"`
+	Name           string    `json:"name"`
+	Description    string    `json:"description"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// Role represents a system role
+type Role struct {
+	ID          string       `json:"id"`
+	CompanyID   int64        `json:"company_id"`
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	Permissions []Permission `json:"permissions"`
+	CreatedAt   time.Time    `json:"created_at"`
+	UpdatedAt   time.Time    `json:"updated_at"`
 }
 
 type UserRole struct {
@@ -60,15 +65,29 @@ type CreateCompanyUserRequest struct {
 	IsMain    bool  `json:"is_main"`
 }
 
-type CreateRoleRequest struct {
-	CompanyID   int64  `json:"company_id" validate:"required"`
-	Name        string `json:"name" validate:"required,min=3,max=50"`
-	Description string `json:"description" validate:"omitempty,max=255"`
+// CreatePermissionRequest represents the request to create a new permission
+type CreatePermissionRequest struct {
+	Name        string `json:"name" validate:"required"`
+	Description string `json:"description" validate:"required"`
 }
 
-type CreatePermissionRequest struct {
-	RoleID         int64 `json:"role_id" validate:"required"`
-	ModuleActionID int64 `json:"module_action_id" validate:"required"`
+// CreateRoleRequest represents the request to create a new role
+type CreateRoleRequest struct {
+	Name        string   `json:"name" validate:"required"`
+	Description string   `json:"description" validate:"required"`
+	Permissions []string `json:"permissions" validate:"required"`
+}
+
+// AssignPermissionRequest represents the request to assign a permission to a role
+type AssignPermissionRequest struct {
+	RoleID       string `json:"role_id" validate:"required"`
+	PermissionID string `json:"permission_id" validate:"required"`
+}
+
+// RemovePermissionRequest represents the request to remove a permission from a role
+type RemovePermissionRequest struct {
+	RoleID       string `json:"role_id" validate:"required"`
+	PermissionID string `json:"permission_id" validate:"required"`
 }
 
 type AssignRoleRequest struct {

@@ -54,9 +54,20 @@ const (
 	MsgCompanyDeleted            = "company.deleted"
 
 	// Permission messages
-	MsgPermissionDenied      = "permission.denied"
-	MsgPermissionCheckFailed = "permission.check_failed"
-	MsgPermissionRequired    = "permission.required"
+	MsgPermissionDenied       = "permission.denied"
+	MsgPermissionCheckFailed  = "permission.check_failed"
+	MsgPermissionRequired     = "permission.required"
+	MsgPermissionCreateFailed = "permission.create_failed"
+	MsgPermissionAssignFailed = "permission.assign_failed"
+	MsgPermissionRemoveFailed = "permission.remove_failed"
+	MsgPermissionListFailed   = "permission.list_failed"
+	MsgRoleCreateFailed       = "role.create_failed"
+	MsgRoleNotFound           = "role.not_found"
+	MsgRoleListFailed         = "role.list_failed"
+	MsgPermissionAssigned     = "permission.assigned"
+	MsgPermissionRemoved      = "permission.removed"
+	MsgRoleAssignFailed       = "role.assign_failed"
+	MsgRoleAssigned           = "role.assigned"
 
 	// Validation messages
 	MsgValidationFailed    = "validation.failed"
@@ -139,9 +150,20 @@ func NewMessageStore() *MessageStore {
 		MsgCompanyDeleted:            "Company deleted successfully",
 
 		// Permission messages
-		MsgPermissionDenied:      "Insufficient permissions",
-		MsgPermissionCheckFailed: "Failed to check permissions",
-		MsgPermissionRequired:    "Permission required",
+		MsgPermissionDenied:       "Insufficient permissions",
+		MsgPermissionCheckFailed:  "Failed to check permissions",
+		MsgPermissionRequired:     "Permission required",
+		MsgPermissionCreateFailed: "Failed to create permission",
+		MsgPermissionAssignFailed: "Failed to assign permission to role",
+		MsgPermissionRemoveFailed: "Failed to remove permission from role",
+		MsgPermissionListFailed:   "Failed to list permissions",
+		MsgRoleCreateFailed:       "Failed to create role",
+		MsgRoleNotFound:           "Role not found",
+		MsgRoleListFailed:         "Failed to list roles",
+		MsgPermissionAssigned:     "Permission assigned successfully",
+		MsgPermissionRemoved:      "Permission removed successfully",
+		MsgRoleAssignFailed:       "Failed to assign role",
+		MsgRoleAssigned:           "Role assigned successfully",
 
 		// Validation messages
 		MsgValidationFailed:    "Validation failed",
@@ -212,9 +234,20 @@ func NewMessageStore() *MessageStore {
 		MsgCompanyDeleted:            "Empresa eliminada exitosamente",
 
 		// Permission messages
-		MsgPermissionDenied:      "Permisos insuficientes",
-		MsgPermissionCheckFailed: "Error al verificar los permisos",
-		MsgPermissionRequired:    "Se requieren permisos",
+		MsgPermissionDenied:       "Permisos insuficientes",
+		MsgPermissionCheckFailed:  "Error al verificar los permisos",
+		MsgPermissionRequired:     "Se requieren permisos",
+		MsgPermissionCreateFailed: "Error al crear el permiso",
+		MsgPermissionAssignFailed: "Error al asignar el permiso al rol",
+		MsgPermissionRemoveFailed: "Error al eliminar el permiso del rol",
+		MsgPermissionListFailed:   "Error al listar los permisos",
+		MsgRoleCreateFailed:       "Error al crear el rol",
+		MsgRoleNotFound:           "Rol no encontrado",
+		MsgRoleListFailed:         "Error al listar los roles",
+		MsgPermissionAssigned:     "Permiso asignado exitosamente",
+		MsgPermissionRemoved:      "Permiso eliminado exitosamente",
+		MsgRoleAssignFailed:       "Error al asignar el rol",
+		MsgRoleAssigned:           "Rol asignado exitosamente",
 
 		// Validation messages
 		MsgValidationFailed:    "Error de validación",

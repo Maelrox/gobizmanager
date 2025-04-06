@@ -27,6 +27,7 @@ var migrations = []struct {
 		stmt: `CREATE TABLE IF NOT EXISTS users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			email TEXT NOT NULL UNIQUE,
+			email_hash TEXT NOT NULL UNIQUE,
 			password TEXT NOT NULL,
 			phone TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
