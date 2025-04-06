@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gobizmanager-api
+    environment:
+      DB_TYPE: sqlite
+      DB_PATH: /app/data/gobizmanager.db
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-default_encryption_key_123}
+    ports:
+      - "8080:8080"
+    volumes:
+      - sqlite_data:/app/data
+    networks:
+      - gobizmanager-network
+
+volumes:
+  sqlite_data:
+
+networks:
+  gobizmanager-network:
+    driver: bridge 
