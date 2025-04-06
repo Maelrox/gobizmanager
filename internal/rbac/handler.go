@@ -157,7 +157,18 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	role, err := h.Repo.CreateRoleWithPermissions(req.Name, req.Description, req.Permissions)
+	// Verify user has access to this company
+	hasAccess, err := h.Repo.HasCompanyAccess(userID, strconv.FormatInt(req.CompanyID, 10))
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
+		return
+	}
+	if !hasAccess {
+		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		return
+	}
+
+	role, err := h.Repo.CreateRole(req.CompanyID, req.Name, req.Description)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgRoleCreateFailed))
 		return
@@ -174,17 +185,6 @@ func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
 		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
-		return
-	}
-
-	// Check if user is ROOT
-	isRoot, err := h.Repo.IsRoot(userID)
-	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
-		return
-	}
-	if !isRoot {
-		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
 		return
 	}
 
@@ -431,7 +431,7 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.Repo.AssignRole(companyUser.ID, req.RoleID)
+	_, err = h.Repo.AssignRole(userID, req.RoleID)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgRoleAssignFailed))
 		return

@@ -72,9 +72,9 @@ type CreatePermissionRequest struct {
 
 // CreateRoleRequest represents the request to create a new role
 type CreateRoleRequest struct {
-	Name        string   `json:"name" validate:"required"`
-	Description string   `json:"description" validate:"required"`
-	Permissions []string `json:"permissions" validate:"required"`
+	CompanyID   int64  `json:"company_id" validate:"required"`
+	Name        string `json:"name" validate:"required"`
+	Description string `json:"description" validate:"required"`
 }
 
 // AssignPermissionRequest represents the request to assign a permission to a role

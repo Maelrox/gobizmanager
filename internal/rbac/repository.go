@@ -81,16 +81,30 @@ func (r *Repository) GetCompanyUserByCompanyAndUser(companyID, userID int64) (*C
 }
 
 // Role operations
-func (r *Repository) CreateRole(companyID int64, name, description string) (int64, error) {
+func (r *Repository) CreateRole(companyID int64, name, description string) (*Role, error) {
 	now := time.Now()
 	result, err := r.db.Exec(
 		"INSERT INTO roles (company_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
 		companyID, name, description, now, now,
 	)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.LastInsertId()
+	roleID, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	role := &Role{
+		ID:          strconv.FormatInt(roleID, 10),
+		CompanyID:   companyID,
+		Name:        name,
+		Description: description,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	return role, nil
 }
 
 func (r *Repository) GetRoleByID(id int64) (*Role, error) {
@@ -180,11 +194,26 @@ func (r *Repository) GetPermissionsByRoleID(roleID int64) ([]Permission, error) 
 }
 
 // UserRole operations
-func (r *Repository) AssignRole(companyUserID, roleID int64) (int64, error) {
+func (r *Repository) AssignRole(userId, roleID int64) (int64, error) {
+	// Check for existing role assignment
+	var exists bool
+	err := r.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM user_roles 
+			WHERE user_id = ? AND role_id = ?
+		)
+	`, userId, roleID).Scan(&exists)
+	if err != nil {
+		return 0, err
+	}
+	if exists {
+		return 0, fmt.Errorf("role already assigned to user")
+	}
+
 	now := time.Now()
 	result, err := r.db.Exec(
-		"INSERT INTO user_roles (company_user_id, role_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
-		companyUserID, roleID, now, now,
+		"INSERT INTO user_roles (user_id, role_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
+		userId, roleID, now, now,
 	)
 	if err != nil {
 		return 0, err
@@ -381,33 +410,6 @@ func (r *Repository) IsRoot(userID int64) (bool, error) {
 	var isRoot bool
 	err := r.db.QueryRow(query, userID).Scan(&isRoot)
 	return isRoot, err
-}
-
-// CreateRoleWithPermissions creates a new role with permissions
-func (r *Repository) CreateRoleWithPermissions(name, description string, permissions []string) (*Role, error) {
-	now := time.Now()
-	result, err := r.db.Exec(
-		"INSERT INTO roles (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)",
-		name, description, now, now,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	roleID, err := result.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-
-	role := &Role{
-		ID:          strconv.FormatInt(roleID, 10),
-		Name:        name,
-		Description: description,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-
-	return role, nil
 }
 
 // AssignPermissionToRole assigns a permission to a role
