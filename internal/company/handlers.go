@@ -96,12 +96,6 @@ func (h *Handler) createCompany(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add user to company
-	if err := h.Repo.AddUserToCompany(tx, companyID, userID); err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgCompanyCreateFailed))
-		return
-	}
-
 	if err := tx.Commit(); err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgCompanyCreateFailed))
 		return
@@ -112,6 +106,8 @@ func (h *Handler) createCompany(w http.ResponseWriter, r *http.Request) {
 		"name":       req.Name,
 		"phone":      req.Phone,
 		"email":      req.Email,
+		"address":    req.Address,
+		"logo":       req.Logo,
 		"identifier": req.Identifier,
 	})
 }

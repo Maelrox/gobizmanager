@@ -16,6 +16,7 @@ var migrations = []struct {
 			name TEXT NOT NULL,
 			email TEXT,
 			phone TEXT,
+			address TEXT,
 			identifier TEXT,
 			logo TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

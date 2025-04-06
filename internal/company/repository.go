@@ -67,11 +67,20 @@ func (r *Repository) CreateCompanyWithTx(tx *sql.Tx, name, email, phone, address
 
 	// Add user to company
 	_, err = tx.Exec(`
-		INSERT INTO company_users (company_id, user_id, role_id, created_at, updated_at)
-		VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-	`, companyID, userID, roleID)
+		INSERT INTO company_users (company_id, user_id, is_main, created_at, updated_at)
+		VALUES (?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, companyID, userID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to add user to company: %w", err)
+	}
+
+	// Assign ADMIN role to user
+	_, err = tx.Exec(`
+		INSERT INTO user_roles (user_id, role_id, created_at, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, userID, roleID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to assign ADMIN role to user: %w", err)
 	}
 
 	return companyID, nil
