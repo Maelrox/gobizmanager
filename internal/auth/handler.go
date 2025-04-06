@@ -60,7 +60,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register user
-	userID, err := h.UserRepo.RegisterUser(req.Username, req.Password)
+	userID, err := h.UserRepo.RegisterUser(req.Username, req.Password, req.Phone)
 	if err != nil {
 		logger.Error("Failed to register user", zap.Error(err))
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgAuthCreateUserFailed))

@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"database/sql"
+	"fmt"
 	"strconv"
 	"time"
 )
@@ -197,29 +198,23 @@ func (r *Repository) GetModuleActionByID(id int64) (*ModuleAction, error) {
 	return &action, nil
 }
 
-// Check if user has permission
+// HasPermission checks if a user has a specific permission for a company
 func (r *Repository) HasPermission(userID, companyID int64, moduleName, actionName string) (bool, error) {
-	query := `
-		SELECT COUNT(*) > 0
-		FROM user_roles ur
-		JOIN company_users cu ON ur.company_user_id = cu.id
-		JOIN roles r ON ur.role_id = r.id
-		JOIN permissions p ON r.id = p.role_id
-		JOIN module_actions ma ON p.module_action_id = ma.id
-		JOIN modules m ON ma.module_id = m.id
-		JOIN companies c ON cu.company_id = c.id
-		WHERE cu.user_id = ? 
-		AND (
-			(cu.company_id = ? AND r.name = 'ROOT' AND r.root_group_id = c.root_group_id)
-			OR
-			(cu.company_id = ? AND r.company_id = c.id)
-		)
-		AND m.name = ? AND ma.name = ?
-	`
 	var hasPermission bool
-	err := r.db.QueryRow(query, userID, companyID, companyID, moduleName, actionName).Scan(&hasPermission)
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM role_permissions rp
+			JOIN roles r ON rp.role_id = r.id
+			JOIN permissions p ON rp.permission_id = p.id
+			JOIN company_users cu ON r.id = cu.role_id
+			WHERE cu.user_id = ? 
+			AND cu.company_id = ?
+			AND p.module = ?
+			AND p.action = ?
+		)`
+	err := r.db.QueryRow(query, userID, companyID, moduleName, actionName).Scan(&hasPermission)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to check permission: %w", err)
 	}
 	return hasPermission, nil
 }

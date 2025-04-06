@@ -2,6 +2,7 @@ package company
 
 import (
 	"database/sql"
+	"fmt"
 
 	"gobizmanager/internal/rbac"
 	"gobizmanager/platform/config"
@@ -21,28 +22,59 @@ func NewRepository(db *sql.DB, cfg *config.Config, rbacRepo *rbac.Repository) *R
 	}
 }
 
-func (r *Repository) CreateCompanyWithTx(tx *sql.Tx, name, phone, email, identifier string) (int64, error) {
-	// Create a temporary company to encrypt fields
+func (r *Repository) CreateCompanyWithTx(tx *sql.Tx, name, email, phone, address, logo string, userID int64) (int64, error) {
+	// Create temporary company to handle encryption
 	company := &Company{
-		Name:       name,
-		Phone:      phone,
-		Email:      email,
-		Identifier: identifier,
+		Name:    name,
+		Email:   email,
+		Phone:   phone,
+		Address: address,
+		Logo:    sql.NullString{String: logo, Valid: logo != ""},
 	}
 
 	// Encrypt sensitive fields
 	if err := company.EncryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to encrypt company fields: %w", err)
 	}
 
+	// Create company
 	result, err := tx.Exec(`
-		INSERT INTO companies (name, phone, email, identifier) 
-		VALUES (?, ?, ?, ?)
-	`, company.Name, company.Phone, company.Email, company.Identifier)
+		INSERT INTO companies (name, email, phone, address, logo, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, company.Name, company.Email, company.Phone, company.Address, company.Logo)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to create company: %w", err)
 	}
-	return result.LastInsertId()
+
+	companyID, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get company ID: %w", err)
+	}
+
+	// Create ADMIN role for the company
+	roleResult, err := tx.Exec(`
+		INSERT INTO roles (name, description, company_id, created_at, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, "ADMIN", "Company administrator", companyID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create ADMIN role: %w", err)
+	}
+
+	roleID, err := roleResult.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get role ID: %w", err)
+	}
+
+	// Add user to company
+	_, err = tx.Exec(`
+		INSERT INTO company_users (company_id, user_id, role_id, created_at, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, companyID, userID, roleID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to add user to company: %w", err)
+	}
+
+	return companyID, nil
 }
 
 func (r *Repository) CreateCompany(name, phone, email, identifier string) (int64, error) {
@@ -175,15 +207,42 @@ func (r *Repository) ListCompaniesForUser(userID int64) ([]Company, error) {
 			&c.ID, &c.Name, &c.Phone, &c.Email,
 			&c.Identifier, &c.Logo, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan company: %w", err)
 		}
 
 		// Decrypt sensitive fields
 		if err := c.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to decrypt company fields: %w", err)
 		}
 
 		companies = append(companies, c)
 	}
 	return companies, nil
+}
+
+// CompanyExistsForUser checks if a company with the given name already exists for the user
+func (r *Repository) CompanyExistsForUser(userID int64, name string) (bool, error) {
+	var exists bool
+	query := `
+		SELECT EXISTS (
+			SELECT 1 
+			FROM companies c
+			JOIN company_users cu ON c.id = cu.company_id
+			WHERE cu.user_id = ? AND c.name = ?
+		)`
+	err := r.db.QueryRow(query, userID, name).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check company existence: %w", err)
+	}
+	return exists, nil
+}
+
+// AddUserToCompany adds a user to a company
+func (r *Repository) AddUserToCompany(tx *sql.Tx, companyID, userID int64) error {
+	query := `INSERT INTO company_users (company_id, user_id, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+	_, err := tx.Exec(query, companyID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to add user to company: %w", err)
+	}
+	return nil
 }

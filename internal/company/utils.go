@@ -18,7 +18,7 @@ func CreateCompanyWithAdmin(
 	userID int64,
 ) (int64, error) {
 	// Create company
-	companyID, err := repo.CreateCompanyWithTx(tx, name, phone, email, identifier)
+	companyID, err := repo.CreateCompanyWithTx(tx, name, email, phone, "", "", userID)
 	if err != nil {
 		return 0, err
 	}

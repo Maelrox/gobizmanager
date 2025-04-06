@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"gobizmanager/pkg/encryption"
 	"gobizmanager/platform/config"
 	"time"
 )
@@ -209,8 +210,8 @@ func (r *Repository) RegisterRootUser(username, password string) (int64, error) 
 	return userID, nil
 }
 
-// RegisterUser handles the complete user registration process
-func (r *Repository) RegisterUser(username, password string) (int64, error) {
+// RegisterUser creates a new user and returns their ID
+func (r *Repository) RegisterUser(username, password, phone string) (int64, error) {
 	// Start transaction
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -218,26 +219,57 @@ func (r *Repository) RegisterUser(username, password string) (int64, error) {
 	}
 	defer tx.Rollback()
 
-	// Create user
-	userID, err := r.CreateUserWithTx(tx, username, password, "")
+	// Encrypt sensitive fields
+	encryptedUsername, err := encryption.Encrypt(username, r.cfg.EncryptionKey)
+	if err != nil {
+		return 0, fmt.Errorf("failed to encrypt username: %w", err)
+	}
+
+	encryptedPhone, err := encryption.Encrypt(phone, r.cfg.EncryptionKey)
+	if err != nil {
+		return 0, fmt.Errorf("failed to encrypt phone: %w", err)
+	}
+
+	// Hash password
+	hashedPassword, err := HashPassword(password)
 	if err != nil {
 		return 0, err
+	}
+
+	// Create email hash for searching
+	emailHash := fmt.Sprintf("%x", sha256.Sum256([]byte(username)))
+
+	// Create user
+	result, err := tx.Exec(`
+		INSERT INTO users (email, email_hash, password, phone, created_at, updated_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, encryptedUsername, emailHash, hashedPassword, encryptedPhone)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	userID, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get user ID: %w", err)
 	}
 
 	// Get ROOT role ID
 	rootRoleID, err := r.GetRootRoleID(tx)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to get ROOT role ID: %w", err)
 	}
 
-	// Assign ROOT role
-	if err := r.AssignRootRole(tx, userID, rootRoleID); err != nil {
-		return 0, err
+	// Assign ROOT role to user
+	_, err = tx.Exec(`
+		INSERT INTO user_roles (user_id, role_id, created_at, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, userID, rootRoleID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to assign ROOT role to user: %w", err)
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return userID, nil

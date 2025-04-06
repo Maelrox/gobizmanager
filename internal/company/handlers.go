@@ -54,18 +54,7 @@ func (h *Handler) createCompany(w http.ResponseWriter, r *http.Request) {
 	// Get user ID from context
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
-		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
-		return
-	}
-
-	// Check if user is ROOT
-	isRoot, err := h.UserRepo.IsRoot(userID)
-	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgPermissionCheckFailed))
-		return
-	}
-	if !isRoot {
-		utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, language.MsgPermissionDenied))
+		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUnauthorized))
 		return
 	}
 
@@ -75,8 +64,20 @@ func (h *Handler) createCompany(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate the request
 	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgValidationFailed))
+		utils.ValidationError(w, err, lang, h.MsgStore)
+		return
+	}
+
+	// Check if company with same name already exists for this user
+	exists, err := h.Repo.CompanyExistsForUser(userID, req.Name)
+	if err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgCompanyCreateFailed))
+		return
+	}
+	if exists {
+		utils.JSONError(w, http.StatusConflict, h.MsgStore.GetMessage(lang, language.MsgCompanyAlreadyExists))
 		return
 	}
 
@@ -88,26 +89,20 @@ func (h *Handler) createCompany(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// Create company with admin setup
-	companyID, err := CreateCompanyWithAdmin(
-		tx,
-		h.Repo,
-		h.RBACRepo,
-		h.RoleRepo,
-		h.PermissionRepo,
-		req.Name,
-		req.Phone,
-		req.Email,
-		req.Identifier,
-		userID,
-	)
+	// Create company
+	companyID, err := h.Repo.CreateCompanyWithTx(tx, req.Name, req.Email, req.Phone, req.Address, req.Logo, userID)
 	if err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgCompanyCreateFailed))
 		return
 	}
 
-	err = tx.Commit()
-	if err != nil {
+	// Add user to company
+	if err := h.Repo.AddUserToCompany(tx, companyID, userID); err != nil {
+		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgCompanyCreateFailed))
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
 		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgCompanyCreateFailed))
 		return
 	}
