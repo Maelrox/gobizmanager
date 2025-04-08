@@ -476,7 +476,7 @@ func (r *Repository) ListPermissions(companyID int64) ([]Permission, error) {
 		FROM permissions p
 		JOIN role_permissions rp ON p.id = rp.permission_id
 		JOIN roles r ON rp.role_id = r.id
-		WHERE p.company_id = ? OR p.company_id IS NULL
+		WHERE p.company_id = ?
 	`, companyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list permissions: %w", err)
@@ -499,12 +499,12 @@ func (r *Repository) ListPermissions(companyID int64) ([]Permission, error) {
 }
 
 // ListRolesWithPermissions returns all roles with their permissions
-func (r *Repository) ListRolesWithPermissions() ([]Role, error) {
+func (r *Repository) ListRolesWithPermissions(companyID int64) ([]Role, error) {
 	// Get all roles
 	rows, err := r.db.Query(`
 		SELECT id, company_id, name, description, created_at, updated_at 
-		FROM roles
-	`)
+		FROM roles WHERE name != 'ROOT' and name != 'USER' AND company_id = ?
+	`, companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -513,11 +513,18 @@ func (r *Repository) ListRolesWithPermissions() ([]Role, error) {
 	var roles []Role
 	for rows.Next() {
 		var role Role
+		var companyID sql.NullInt64 // Use sql.NullInt64 for nullable integer
 		if err := rows.Scan(
-			&role.ID, &role.CompanyID, &role.Name, &role.Description,
+			&role.ID, &companyID, &role.Name, &role.Description,
 			&role.CreatedAt, &role.UpdatedAt,
 		); err != nil {
 			return nil, err
+		}
+		// Handle nullable company_id
+		if companyID.Valid {
+			role.CompanyID = companyID.Int64
+		} else {
+			role.CompanyID = 0 // Use 0 as default value for null company_id
 		}
 		roles = append(roles, role)
 	}
@@ -559,19 +566,16 @@ func (r *Repository) GetModuleActionID(moduleName, actionName string) (int64, er
 	return id, nil
 }
 
-// GetPermissionByID retrieves a permission by its ID
+// GetPermissionByID retrieves a permission by ID
 func (r *Repository) GetPermissionByID(id int64) (*Permission, error) {
 	var permission Permission
-	var companyID sql.NullInt64
 	err := r.db.QueryRow(`
-		SELECT id, company_id, name, description, created_at, updated_at 
-		FROM permissions WHERE id = ?
-	`, id).Scan(&permission.ID, &companyID, &permission.Name, &permission.Description, &permission.CreatedAt, &permission.UpdatedAt)
+		SELECT id, name, description, company_id
+		FROM permissions
+		WHERE id = ?
+	`, id).Scan(&permission.ID, &permission.Name, &permission.Description, &permission.CompanyID)
 	if err != nil {
 		return nil, err
-	}
-	if companyID.Valid {
-		permission.CompanyID = companyID.Int64
 	}
 	return &permission, nil
 }
@@ -618,4 +622,167 @@ func (r *Repository) CreatePermissionModuleAction(permissionID, moduleActionID i
 	}
 
 	return nil
+}
+
+// UpdateRolePermissions updates the permissions for a role
+func (r *Repository) UpdateRolePermissions(roleID string, permissionIDs []int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Convert string IDs to int64
+	roleIDInt, err := strconv.ParseInt(roleID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid role ID: %w", err)
+	}
+
+	// Delete existing permissions
+	_, err = tx.Exec("DELETE FROM role_permissions WHERE role_id = ?", roleIDInt)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing permissions: %w", err)
+	}
+
+	// Insert new permissions
+	for _, permID := range permissionIDs {
+		_, err = tx.Exec(`
+			INSERT INTO role_permissions (role_id, permission_id, created_at, updated_at)
+			VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		`, roleIDInt, permID)
+		if err != nil {
+			return fmt.Errorf("failed to insert permission: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// UpdatePermissionModuleActions updates module actions for a permission
+func (r *Repository) UpdatePermissionModuleActions(permissionID string, moduleActionIDs []int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Delete existing module actions
+	_, err = tx.Exec("DELETE FROM permission_module_actions WHERE permission_id = ?", permissionID)
+	if err != nil {
+		return err
+	}
+
+	// Insert new module actions
+	for _, actionID := range moduleActionIDs {
+		_, err = tx.Exec(`
+			INSERT INTO permission_module_actions (permission_id, module_action_id)
+			VALUES (?, ?)
+		`, permissionID, actionID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// GetModuleActions returns all module actions
+func (r *Repository) GetModuleActions() ([]struct {
+	ID          int64  `json:"id"`
+	ModuleName  string `json:"module_name"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}, error) {
+	rows, err := r.db.Query(`
+		SELECT ma.id, m.name as module_name, ma.name, ma.description
+		FROM module_actions ma
+		JOIN modules m ON ma.module_id = m.id
+		ORDER BY m.name, ma.name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var actions []struct {
+		ID          int64  `json:"id"`
+		ModuleName  string `json:"module_name"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+
+	for rows.Next() {
+		var action struct {
+			ID          int64  `json:"id"`
+			ModuleName  string `json:"module_name"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		if err := rows.Scan(&action.ID, &action.ModuleName, &action.Name, &action.Description); err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+
+	return actions, nil
+}
+
+// GetPermissionModuleActions returns module actions for a permission
+func (r *Repository) GetPermissionModuleActions(permissionID int64) ([]struct {
+	ID          int64  `json:"id"`
+	ModuleName  string `json:"module_name"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}, error) {
+	rows, err := r.db.Query(`
+		SELECT ma.id, m.name as module_name, ma.name, ma.description
+		FROM module_actions ma
+		JOIN modules m ON ma.module_id = m.id
+		JOIN permission_module_actions pma ON ma.id = pma.module_action_id
+		WHERE pma.permission_id = ?
+		ORDER BY m.name, ma.name
+	`, permissionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var actions []struct {
+		ID          int64  `json:"id"`
+		ModuleName  string `json:"module_name"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+
+	for rows.Next() {
+		var action struct {
+			ID          int64  `json:"id"`
+			ModuleName  string `json:"module_name"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		if err := rows.Scan(&action.ID, &action.ModuleName, &action.Name, &action.Description); err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+
+	return actions, nil
+}
+
+// GetCompanyUser returns a company user by user ID and company ID
+func (r *Repository) GetCompanyUser(userID int64, companyID string) (*CompanyUser, error) {
+	var cu CompanyUser
+	err := r.db.QueryRow(
+		"SELECT id, company_id, user_id, is_main, created_at, updated_at FROM company_users WHERE user_id = ? AND company_id = ?",
+		userID, companyID,
+	).Scan(&cu.ID, &cu.CompanyID, &cu.UserID, &cu.IsMain, &cu.CreatedAt, &cu.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &cu, nil
 }

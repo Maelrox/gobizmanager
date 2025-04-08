@@ -116,3 +116,9 @@ type CreatePermissionModuleActionRequest struct {
 	PermissionID   int64 `json:"permission_id" validate:"required"`
 	ModuleActionID int64 `json:"module_action_id" validate:"required"`
 }
+
+// UpdateRolePermissionsRequest represents the request to update role permissions
+type UpdateRolePermissionsRequest struct {
+	RoleID        string  `json:"role_id" validate:"required"`
+	PermissionIDs []int64 `json:"permission_ids" validate:"required"`
+}

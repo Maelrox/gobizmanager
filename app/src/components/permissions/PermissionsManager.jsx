@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'preact/hooks';
-import { h } from 'preact';
-import api from '../../config/axios';
+import { FaEdit, FaUserPlus, FaKey, FaTrash, FaPlus } from 'react-icons/fa';
 import Button from '../common/Button';
 import Table from '../common/Table';
+import CompanySelector from '../common/CompanySelector';
+import Select from '../common/Select';
+import Card from '../common/Card';
+import RoleCard from './RoleCard';
+import RoleForm from './RoleForm';
+import { roleService } from '../../services/roleService';
+import PermissionModal from './PermissionModal';
 
 const icons = {
   add: (
@@ -22,36 +28,45 @@ const icons = {
   ),
 };
 
-export default function PermissionsManager({ companyId }) {
+export default function PermissionsManager() {
+  const [companyId, setCompanyId] = useState(null);
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showForm, setShowForm] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    description: '',
-    permissions: [],
+    description: ''
   });
 
   useEffect(() => {
-    fetchData();
+    if (companyId) {
+      fetchData();
+    }
   }, [companyId]);
 
   const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+
     try {
-      const [rolesRes, permissionsRes] = await Promise.all([
-        api.get(`/companies/${companyId}/roles`),
-        api.get(`/companies/${companyId}/permissions`),
+      const [rolesData, permissionsData] = await Promise.all([
+        roleService.listRoles(companyId),
+        roleService.getPermissions(companyId)
       ]);
-      setRoles(rolesRes.data);
-      setPermissions(permissionsRes.data);
+
+      const rolesWithPermissions = rolesData.map(role => ({
+        ...role,
+        permissions: role.permissions || []
+      }));
+
+      setRoles(rolesWithPermissions);
+      setPermissions(permissionsData);
     } catch (err) {
-      setError('Failed to fetch data');
+      setError(err.response?.data?.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -61,7 +76,7 @@ export default function PermissionsManager({ companyId }) {
     if (query.length < 2) return;
     try {
       const response = await api.get(`/companies/${companyId}/users/search`, {
-        params: { q: query, limit: 50 },
+        params: { q: query, limit: 50 }
       });
       setUsers(response.data);
     } catch (err) {
@@ -69,261 +84,139 @@ export default function PermissionsManager({ companyId }) {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleCreateRole = () => {
+    setSelectedRole(null);
+    setShowForm(true);
+  };
+
+  const handleEditRole = (role) => {
+    setSelectedRole(role);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedRole(null);
+  };
+
+  const handleUpdatePermissions = () => {
+    fetchData();
+  };
+
+  const handleDeleteRole = async (id) => {
+    if (!confirm('Are you sure you want to delete this role?')) return;
+
+    try {
+      await roleService.deleteRole(id);
+      setRoles(roles.filter(role => role.id !== id));
+    } catch (err) {
+      setError(err.response?.data?.message || 'An error occurred');
+    }
+  };
+
+  const handleSubmitRole = async (formData) => {
     try {
       if (selectedRole) {
-        await api.put(`/companies/${companyId}/roles/${selectedRole.id}`, formData);
+        const updatedRole = await roleService.updateRole(selectedRole.id, formData);
+        setRoles(roles.map(role => 
+          role.id === selectedRole.id ? { ...role, ...updatedRole } : role
+        ));
       } else {
-        await api.post(`/companies/${companyId}/roles`, formData);
+        const newRole = await roleService.createRole(formData);
+        setRoles([...roles, newRole]);
       }
-      setShowModal(false);
-      setFormData({ name: '', description: '', permissions: [] });
-      setSelectedRole(null);
-      fetchData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Operation failed');
+      throw err;
     }
   };
 
-  const handleDelete = async (id) => {
-    if (confirm('Are you sure you want to delete this role?')) {
-      try {
-        await api.delete(`/companies/${companyId}/roles/${id}`);
-        fetchData();
-      } catch (err) {
-        setError('Failed to delete role');
-      }
-    }
-  };
-
-  const handleEdit = (role) => {
-    setFormData({
-      name: role.name,
-      description: role.description,
-      permissions: role.permissions,
-    });
-    setSelectedRole(role);
-    setShowModal(true);
-  };
-
-  const handleAssignRole = async () => {
-    if (!selectedUser || !selectedRole) return;
+  const handleAddPermission = async (roleId, permissionId) => {
     try {
-      await api.post(`/companies/${companyId}/users/${selectedUser.id}/roles`, {
-        roleId: selectedRole.id,
+      await api.post('/rbac/permissions/assign', {
+        roleId,
+        permissionId
       });
-      setSelectedUser(null);
-      setSelectedRole(null);
       fetchData();
     } catch (err) {
-      setError('Failed to assign role');
+      setError('Failed to assign permission');
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
+  const handleAddUser = async (roleId, userId) => {
+    try {
+      await api.post('/rbac/roles/assign', {
+        roleId,
+        userId
+      });
+      fetchData();
+    } catch (err) {
+      setError('Failed to assign user');
+    }
+  };
 
-  const tableHeaders = ['Name', 'Description', 'Permissions', 'Actions'];
-
-  const renderTableRow = (role) => [
-    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-neutral-900">
-      {role.name}
-    </td>,
-    <td className="px-6 py-4 text-sm text-neutral-500">
-      {role.description}
-    </td>,
-    <td className="px-6 py-4 text-sm text-neutral-500">
-      {role.permissions.join(', ')}
-    </td>,
-    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-      <Button
-        icon="edit"
-        text="Edit"
-        onClick={() => handleEdit(role)}
-        variant="ghost"
-        className="mr-4"
-      />
-      <Button
-        icon="delete"
-        text="Delete"
-        onClick={() => handleDelete(role.id)}
-        variant="ghost"
-      />
-    </td>,
-  ];
+  const handleCompanyChange = (event) => {
+    // Extract the value from the event object if it exists
+    const value = event?.target?.value || event;
+    setCompanyId(value);
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-semibold text-neutral-900">Roles & Permissions</h2>
+        <h1 className="text-2xl font-semibold text-neutral-900">Roles & Permissions</h1>
         <Button
-          icon="add"
-          text="Add Role"
-          onClick={() => {
-            setFormData({ name: '', description: '', permissions: [] });
-            setSelectedRole(null);
-            setShowModal(true);
-          }}
-        />
+          icon={<FaPlus className="w-4 h-4" />}
+          onClick={handleCreateRole}
+          text='Create role'
+        >
+        </Button>
       </div>
 
-      {error && (
-        <div className="bg-accent-50 border-l-4 border-accent-400 p-4 rounded-lg">
-          <p className="text-accent-700 text-sm">{error}</p>
+      <CompanySelector
+        value={companyId}
+        onChange={handleCompanyChange}
+        className="w-full max-w-md"
+      />
+
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+        </div>
+      ) : error ? (
+        <div className="text-red-600">{error}</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {roles.map(role => (
+            <RoleCard
+              key={role.id}
+              role={role}
+              onEdit={handleEditRole}
+              onDelete={handleDeleteRole}
+              onAddPermission={() => handleEditRole(role)}
+              onAddUser={() => handleEditRole(role)}
+            />
+          ))}
         </div>
       )}
 
-      {/* Role Assignment Section */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h3 className="text-lg font-medium text-neutral-900 mb-4">Assign Role to User</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-2">
-              Search User
-            </label>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                searchUsers(e.target.value);
-              }}
-              className="w-full px-4 py-2 rounded-lg border border-neutral-200 focus:border-primary-300 focus:ring-2 focus:ring-primary-200"
-              placeholder="Type to search users..."
-            />
-            {users.length > 0 && (
-              <div className="mt-2 max-h-48 overflow-y-auto">
-                {users.map((user) => (
-                  <div
-                    key={user.id}
-                    className={`p-2 cursor-pointer hover:bg-neutral-50 ${
-                      selectedUser?.id === user.id ? 'bg-primary-50' : ''
-                    }`}
-                    onClick={() => setSelectedUser(user)}
-                  >
-                    {user.name} ({user.email})
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-2">
-              Select Role
-            </label>
-            <select
-              value={selectedRole?.id || ''}
-              onChange={(e) => {
-                const role = roles.find((r) => r.id === e.target.value);
-                setSelectedRole(role);
-              }}
-              className="w-full px-4 py-2 rounded-lg border border-neutral-200 focus:border-primary-300 focus:ring-2 focus:ring-primary-200"
-            >
-              <option value="">Select a role</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="mt-4 flex justify-end">
-          <Button
-            text="Assign Role"
-            onClick={handleAssignRole}
-            disabled={!selectedUser || !selectedRole}
-          />
-        </div>
-      </div>
-
-      {/* Roles Table */}
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-        <Table
-          headers={tableHeaders}
-          data={roles}
-          renderRow={renderTableRow}
+      {showForm && (
+        <RoleForm
+          role={selectedRole}
+          permissions={permissions}
+          companyId={companyId}
+          onClose={() => {
+            setShowForm(false);
+            setSelectedRole(null);
+          }}
+          onSubmit={handleSubmitRole}
         />
-      </div>
+      )}
 
-      {/* Role Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-medium text-neutral-900 mb-4">
-              {selectedRole ? 'Edit Role' : 'Add Role'}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <label htmlFor="name" className="block text-sm font-medium text-neutral-700">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  className="w-full px-4 py-2 rounded-lg border border-neutral-200 focus:border-primary-300 focus:ring-2 focus:ring-primary-200"
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="description" className="block text-sm font-medium text-neutral-700">
-                  Description
-                </label>
-                <textarea
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg border border-neutral-200 focus:border-primary-300 focus:ring-2 focus:ring-primary-200"
-                  rows="3"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-neutral-700">
-                  Permissions
-                </label>
-                <div className="space-y-2">
-                  {permissions.map((permission) => (
-                    <label key={permission.id} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.permissions.includes(permission.id)}
-                        onChange={(e) => {
-                          const newPermissions = e.target.checked
-                            ? [...formData.permissions, permission.id]
-                            : formData.permissions.filter((id) => id !== permission.id);
-                          setFormData({ ...formData, permissions: newPermissions });
-                        }}
-                        className="rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span className="ml-2 text-sm text-neutral-700">{permission.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="flex justify-end space-x-3">
-                <Button
-                  text="Cancel"
-                  onClick={() => setShowModal(false)}
-                  variant="ghost"
-                />
-                <Button
-                  text={selectedRole ? 'Update' : 'Create'}
-                  type="submit"
-                />
-              </div>
-            </form>
-          </div>
-        </div>
+      {selectedRole && (
+        <PermissionModal
+          role={selectedRole}
+          companyId={companyId}
+          onClose={handleCloseModal}
+          onUpdate={handleUpdatePermissions}
+        />
       )}
     </div>
   );

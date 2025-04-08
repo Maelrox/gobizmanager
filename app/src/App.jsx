@@ -5,6 +5,7 @@ import LoginForm from './components/auth/LoginForm';
 import RegisterForm from './components/auth/RegisterForm';
 import CompanyList from './components/companies/CompanyList';
 import PermissionsManager from './components/permissions/PermissionsManager';
+import UserManager from './components/users/UserManager';
 
 function PrivateRoute({ component: Component, ...rest }) {
   const { isAuthenticated } = useAuth();
@@ -40,6 +41,7 @@ export function App() {
         <PublicRoute path="/register" component={RegisterForm} />
         <PrivateRoute path="/companies" component={CompanyList} />
         <PrivateRoute path="/roles" component={PermissionsManager} />
+        <PrivateRoute path="/users" component={UserManager} />
         <PrivateRoute path="/dashboard" component={CompanyList} />
         <PrivateRoute path="/" component={CompanyList} />
       </Router>

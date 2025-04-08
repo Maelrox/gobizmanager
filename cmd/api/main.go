@@ -67,7 +67,8 @@ func main() {
 	// Initialize handlers
 	authHandler := auth.NewHandler(userRepo, jwtManager, msgStore)
 	companyHandler := company.NewHandler(companyRepo, rbacRepo, userRepo, roleRepo, permissionRepo, msgStore)
-	rbacHandler := rbac.NewHandler(rbacRepo, msgStore)
+	roleHandler := rbac.NewRoleHandler(rbacRepo, msgStore)
+	permissionHandler := rbac.NewPermissionHandler(rbacRepo, msgStore)
 	companyUserHandler := company_user.NewHandler(companyUserRepo, rbacRepo, msgStore)
 	userHandler := user.NewHandler(userRepo)
 
@@ -102,7 +103,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(jwtManager, msgStore))
 		r.Mount("/companies", company.Routes(companyHandler, msgStore))
-		r.Mount("/rbac", rbac.Routes(rbacHandler, msgStore))
+		r.Mount("/rbac", rbac.Routes(roleHandler, permissionHandler))
 		r.Mount("/company-users", company_user.Routes(companyUserHandler))
 		r.Mount("/users", user.Routes(userHandler))
 	})

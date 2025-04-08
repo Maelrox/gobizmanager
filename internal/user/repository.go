@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
-	"strings"
 
 	"gobizmanager/pkg/encryption"
 	"gobizmanager/platform/config"
@@ -290,19 +289,17 @@ func (r *Repository) IsRoot(userID int64) (bool, error) {
 	return isRoot, err
 }
 
-// SearchUsers searches for users within a company
-func (r *Repository) SearchUsers(companyID string, query string, limit int) ([]struct {
+// SearchUsers lists users within a company
+func (r *Repository) SearchUsers(companyID string) ([]struct {
 	ID    uint   `json:"id"`
-	Name  string `json:"name"`
 	Email string `json:"email"`
 }, error) {
 	rows, err := r.db.Query(`
-		SELECT u.id, u.name, u.email
+		SELECT u.id, u.email
 		FROM users u
 		JOIN company_users cu ON u.id = cu.user_id
-		WHERE cu.company_id = ? AND (LOWER(u.name) LIKE LOWER(?) OR LOWER(u.email) LIKE LOWER(?))
-		LIMIT ?
-	`, companyID, "%"+strings.ToLower(query)+"%", "%"+strings.ToLower(query)+"%", limit)
+		WHERE cu.company_id = ?
+	`, companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -310,19 +307,25 @@ func (r *Repository) SearchUsers(companyID string, query string, limit int) ([]s
 
 	var users []struct {
 		ID    uint   `json:"id"`
-		Name  string `json:"name"`
 		Email string `json:"email"`
 	}
 
 	for rows.Next() {
 		var user struct {
 			ID    uint   `json:"id"`
-			Name  string `json:"name"`
 			Email string `json:"email"`
 		}
-		if err := rows.Scan(&user.ID, &user.Name, &user.Email); err != nil {
+		if err := rows.Scan(&user.ID, &user.Email); err != nil {
 			return nil, err
 		}
+
+		// Decrypt the email
+		decryptedEmail, err := encryption.Decrypt(user.Email, r.cfg.EncryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt email: %w", err)
+		}
+		user.Email = decryptedEmail
+
 		users = append(users, user)
 	}
 

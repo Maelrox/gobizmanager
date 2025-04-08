@@ -163,20 +163,19 @@ var migrations = []struct {
 				(11, 3, 'update', 'Update role', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 				(12, 3, 'delete', 'Delete role', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-			-- Create ROOT role (with NULL company_id for system-wide access)
+			-- Create default roles
 			INSERT OR IGNORE INTO roles (id, company_id, name, description, created_at, updated_at)
-			VALUES (1, NULL, 'ROOT', 'System ROOT user with full access', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-
-			-- Create USER role (with NULL company_id for system-wide access)
-			INSERT OR IGNORE INTO roles (id, company_id, name, description, created_at, updated_at)
-			VALUES (2, NULL, 'USER', 'Basic user role with limited access', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+			VALUES 
+				(1, null, 'ROOT', 'System root role with all permissions', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(2, null, 'ADMIN', 'Company administrator role', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(3, null, 'USER', 'Default user no permissions', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 			-- Create default permissions
 			INSERT OR IGNORE INTO permissions (id, company_id, name, description, created_at, updated_at)
 			VALUES 
-				(1, 1, 'manage_companies', 'Full access to company management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-				(2, 1, 'manage_users', 'Full access to user management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-				(3, 1, 'manage_roles', 'Full access to role management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+				(1, null, 'manage_companies', 'Full access to company management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(2, null, 'manage_users', 'Full access to user management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(3, null, 'manage_roles', 'Full access to role management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 			-- Add module actions to permissions
 			INSERT OR IGNORE INTO permission_module_actions (permission_id, module_action_id, created_at, updated_at)
