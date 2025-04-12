@@ -35,20 +35,22 @@ export const roleService = {
     await api.delete(`/rbac/roles/${roleId}`);
   },
 
-  async searchUsers(query, companyId) {
-    const response = await api.get(`/users/search`, {
-      params: { companyId, q: query, limit: 50 }
-    });
-    return response.data.map(user => ({
-      value: user.id,
-      label: user.email
-    }));
+  async searchUsers(companyId) {
+    const response = await api.get(`/users/search?companyId=${companyId}`);
+    return response.data;
   },
 
   async updateRolePermissions(roleId, permissionIds) {
-    const response = await api.put('/rbac/roles/permissions', {
-      role_id: roleId,
+    const response = await api.put(`/rbac/roles/${roleId}/permissions`, {
       permission_ids: permissionIds
+    });
+    return response.data;
+  },
+
+  async assignUserToRole(roleId, userId) {
+    const response = await api.post('/rbac/roles/assign', {
+      roleId,
+      userId
     });
     return response.data;
   },

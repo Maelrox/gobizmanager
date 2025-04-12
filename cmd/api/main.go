@@ -2,28 +2,27 @@
 package main
 
 import (
-	"database/sql"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	_ "github.com/mattn/go-sqlite3"
 	"go.uber.org/zap"
 
-	"gobizmanager/internal/auth"
-	"gobizmanager/internal/company"
-	"gobizmanager/internal/company_user"
-	"gobizmanager/internal/rbac"
-	"gobizmanager/internal/role"
-	"gobizmanager/internal/role/permission"
-	"gobizmanager/internal/user"
+	"gobizmanager/internal/app/auth"
+	"gobizmanager/internal/app/company"
+	"gobizmanager/internal/app/company_user"
+	"gobizmanager/internal/app/rbac"
+	"gobizmanager/internal/app/role"
+	"gobizmanager/internal/app/role/permission"
+	"gobizmanager/internal/app/user"
 	"gobizmanager/pkg/context"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"
 	"gobizmanager/pkg/migration"
 	"gobizmanager/platform/config"
+	"gobizmanager/platform/database"
 	"gobizmanager/platform/middleware/ratelimit"
 )
 
@@ -37,15 +36,22 @@ func main() {
 	}
 
 	// Initialize database
-	db, err := sql.Open("sqlite3", cfg.DBPath)
+	db, err := database.NewDB(cfg.DBPath)
 	if err != nil {
 		logger.Error("Failed to initialize database", zap.Error(err))
 		return
 	}
-	defer db.Close()
+
+	// Get underlying SQL DB for migrations
+	sqlDB, err := db.DB()
+	if err != nil {
+		logger.Error("Failed to get SQL DB", zap.Error(err))
+		return
+	}
+	defer sqlDB.Close()
 
 	// Apply migrations
-	if err := migration.ApplyMigrations(db); err != nil {
+	if err := migration.ApplyMigrations(sqlDB); err != nil {
 		logger.Error("Failed to apply migrations", zap.Error(err))
 		return
 	}

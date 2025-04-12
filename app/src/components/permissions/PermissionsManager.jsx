@@ -9,6 +9,7 @@ import RoleCard from './RoleCard';
 import RoleForm from './RoleForm';
 import { roleService } from '../../services/roleService';
 import PermissionModal from './PermissionModal';
+import UserAssignmentModal from './UserAssignmentModal';
 
 const icons = {
   add: (
@@ -37,6 +38,7 @@ export default function PermissionsManager() {
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
+  const [showUserAssignment, setShowUserAssignment] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: ''
@@ -128,28 +130,14 @@ export default function PermissionsManager() {
     }
   };
 
-  const handleAddPermission = async (roleId, permissionId) => {
-    try {
-      await api.post('/rbac/permissions/assign', {
-        roleId,
-        permissionId
-      });
-      fetchData();
-    } catch (err) {
-      setError('Failed to assign permission');
-    }
+  const handleAddUser = (role) => {
+    setSelectedRole(role);
+    setShowUserAssignment(true);
   };
 
-  const handleAddUser = async (roleId, userId) => {
-    try {
-      await api.post('/rbac/roles/assign', {
-        roleId,
-        userId
-      });
-      fetchData();
-    } catch (err) {
-      setError('Failed to assign user');
-    }
+  const handleCloseUserAssignment = () => {
+    setShowUserAssignment(false);
+    setSelectedRole(null);
   };
 
   const handleCompanyChange = (event) => {
@@ -166,8 +154,7 @@ export default function PermissionsManager() {
           icon={<FaPlus className="w-4 h-4" />}
           onClick={handleCreateRole}
           text='Create role'
-        >
-        </Button>
+        />
       </div>
 
       <CompanySelector
@@ -191,7 +178,7 @@ export default function PermissionsManager() {
               onEdit={handleEditRole}
               onDelete={handleDeleteRole}
               onAddPermission={() => handleEditRole(role)}
-              onAddUser={() => handleEditRole(role)}
+              onAddUser={() => handleAddUser(role)}
             />
           ))}
         </div>
@@ -210,12 +197,19 @@ export default function PermissionsManager() {
         />
       )}
 
-      {selectedRole && (
+      {selectedRole && !showUserAssignment && (
         <PermissionModal
           role={selectedRole}
           companyId={companyId}
           onClose={handleCloseModal}
           onUpdate={handleUpdatePermissions}
+        />
+      )}
+
+      {selectedRole && showUserAssignment && (
+        <UserAssignmentModal
+          role={selectedRole}
+          onClose={handleCloseUserAssignment}
         />
       )}
     </div>
