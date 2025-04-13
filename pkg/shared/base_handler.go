@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"gobizmanager/internal/app/auth"
+	"gobizmanager/internal/auth"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/utils"
 )

@@ -10,23 +10,33 @@ import (
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
 
-	"gobizmanager/internal/app/pkg/model"
-	"gobizmanager/internal/app/user"
+	types "gobizmanager/internal/types"
+	user "gobizmanager/internal/user"
+	"gobizmanager/pkg/encryption"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"
 	"gobizmanager/pkg/utils"
 )
 
 type Handler struct {
-	UserRepo   *model.Repository
+	UserRepo   *user.Repository
 	JWTManager *JWTManager
 	Validator  *validator.Validate
 	MsgStore   *language.MessageStore
 }
 
+func NewHandler(userRepo *user.Repository, jwtManager *JWTManager, msgStore *language.MessageStore) *Handler {
+	return &Handler{
+		UserRepo:   userRepo,
+		JWTManager: jwtManager,
+		Validator:  validator.New(),
+		MsgStore:   msgStore,
+	}
+}
+
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
-	var req model.CreateUserRequest
+	var req types.CreateUserRequest
 	if err := utils.ParseRequest(r, &req); err != nil {
 		utils.RespondError(w, r, h.MsgStore, err)
 		return
@@ -67,7 +77,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	var req model.LoginRequest
+	var req types.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidRequest))
 		return
@@ -90,7 +100,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check password
-	if !user.CheckPassword(req.Password, u.Password) {
+	if !encryption.CheckPassword(req.Password, u.Password) {
 		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidCredentials))
 		return
 	}
@@ -106,7 +116,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	var req user.RefreshRequest
+	var req types.RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidRequest))
 		return

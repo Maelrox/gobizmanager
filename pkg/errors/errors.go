@@ -2,23 +2,16 @@ package errors
 
 import "net/http"
 
-// ErrorType represents the type of error
 type ErrorType string
 
 const (
-	// Validation errors
-	ErrorTypeValidation ErrorType = "VALIDATION_ERROR"
-	// Authentication errors
+	ErrorTypeValidation     ErrorType = "VALIDATION_ERROR"
 	ErrorTypeAuthentication ErrorType = "AUTHENTICATION_ERROR"
-	// Authorization errors
-	ErrorTypeAuthorization ErrorType = "AUTHORIZATION_ERROR"
-	// Resource not found errors
-	ErrorTypeNotFound ErrorType = "NOT_FOUND_ERROR"
-	// Internal server errors
-	ErrorTypeInternal ErrorType = "INTERNAL_ERROR"
+	ErrorTypeAuthorization  ErrorType = "AUTHORIZATION_ERROR"
+	ErrorTypeNotFound       ErrorType = "NOT_FOUND_ERROR"
+	ErrorTypeInternal       ErrorType = "INTERNAL_ERROR"
 )
 
-// ErrorCode represents a specific error code
 type ErrorCode string
 
 const (

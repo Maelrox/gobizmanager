@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"gobizmanager/internal/app/auth"
+	"gobizmanager/internal/auth"
 	pkgctx "gobizmanager/pkg/context"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"

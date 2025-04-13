@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"gobizmanager/internal/app/company"
+	"gobizmanager/internal/company"
+	"gobizmanager/internal/rbac"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"
 	"gobizmanager/pkg/shared"
@@ -19,7 +20,17 @@ type Handler struct {
 	shared.BaseHandler
 	repo        *Repository
 	companyRepo *company.Repository
+	rbacRepo    *rbac.Repository
 	validator   *validator.Validate
+}
+
+func NewHandler(repo *Repository, rbacRepo *rbac.Repository, msgStore *language.MessageStore) *Handler {
+	return &Handler{
+		BaseHandler: shared.BaseHandler{MsgStore: msgStore},
+		repo:        repo,
+		rbacRepo:    rbacRepo,
+		validator:   validator.New(),
+	}
 }
 
 func (h *Handler) RegisterCompanyUser(w http.ResponseWriter, r *http.Request) {

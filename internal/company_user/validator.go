@@ -3,7 +3,7 @@ package company_user
 import (
 	"errors"
 
-	"gobizmanager/internal/app/company"
+	"gobizmanager/internal/company"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"
 

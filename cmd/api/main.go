@@ -10,13 +10,11 @@ import (
 	"github.com/go-chi/cors"
 	"go.uber.org/zap"
 
-	"gobizmanager/internal/app/auth"
-	"gobizmanager/internal/app/company"
-	"gobizmanager/internal/app/company_user"
-	"gobizmanager/internal/app/rbac"
-	"gobizmanager/internal/app/role"
-	"gobizmanager/internal/app/role/permission"
-	"gobizmanager/internal/app/user"
+	"gobizmanager/internal/auth"
+	"gobizmanager/internal/company"
+	"gobizmanager/internal/company_user"
+	"gobizmanager/internal/rbac"
+	"gobizmanager/internal/user"
 	"gobizmanager/pkg/context"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"
@@ -66,13 +64,11 @@ func main() {
 	userRepo := user.NewRepository(db, cfg)
 	rbacRepo := rbac.NewRepository(db)
 	companyRepo := company.NewRepository(db, cfg, rbacRepo)
-	roleRepo := role.NewRepository(db)
-	permissionRepo := permission.NewRepository(db)
 	companyUserRepo := company_user.NewRepository(db, cfg)
 
 	// Initialize handlers
 	authHandler := auth.NewHandler(userRepo, jwtManager, msgStore)
-	companyHandler := company.NewHandler(companyRepo, rbacRepo, userRepo, roleRepo, permissionRepo, msgStore)
+	companyHandler := company.NewHandler(companyRepo, rbacRepo, userRepo, msgStore)
 	roleHandler := rbac.NewRoleHandler(rbacRepo, msgStore)
 	permissionHandler := rbac.NewPermissionHandler(rbacRepo, msgStore)
 	companyUserHandler := company_user.NewHandler(companyUserRepo, rbacRepo, msgStore)

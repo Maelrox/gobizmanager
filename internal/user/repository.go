@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"gobizmanager/internal/app/pkg/model"
+	model "gobizmanager/internal/models"
 	"gobizmanager/pkg/encryption"
 	"gobizmanager/platform/config"
 

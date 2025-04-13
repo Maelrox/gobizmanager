@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"gobizmanager/internal/app/rbac"
+	model "gobizmanager/internal/models"
+	"gobizmanager/internal/rbac"
 	"gobizmanager/pkg/language"
 	"gobizmanager/platform/config"
 
@@ -68,7 +69,7 @@ func (r *Repository) CreateCompany(req *CreateCompanyRequest, userID int64) (*Co
 	}
 
 	// Create ADMIN role for the company
-	adminRole := &rbac.Role{
+	adminRole := &model.Role{
 		CompanyID:   company.ID,
 		Name:        "ADMIN",
 		Description: "Company administrator",
@@ -79,7 +80,7 @@ func (r *Repository) CreateCompany(req *CreateCompanyRequest, userID int64) (*Co
 	}
 
 	// Get all generic permissions
-	var permissions []rbac.Permission
+	var permissions []model.Permission
 	if err := tx.Where("company_id IS NULL").Find(&permissions).Error; err != nil {
 		tx.Rollback()
 		return nil, fmt.Errorf("failed to get permissions: %w", err)
@@ -87,7 +88,7 @@ func (r *Repository) CreateCompany(req *CreateCompanyRequest, userID int64) (*Co
 
 	// Assign all permissions to ADMIN role
 	for _, permission := range permissions {
-		rolePermission := &rbac.Permission{
+		rolePermission := &model.Permission{
 			CompanyID:   company.ID,
 			Name:        permission.Name,
 			Description: permission.Description,
@@ -98,7 +99,7 @@ func (r *Repository) CreateCompany(req *CreateCompanyRequest, userID int64) (*Co
 		}
 	}
 	// Assign ADMIN role to user
-	userRole := &rbac.UserRole{
+	userRole := &model.UserRole{
 		CompanyUserID: companyUser.ID,
 		RoleID:        adminRole.ID,
 	}

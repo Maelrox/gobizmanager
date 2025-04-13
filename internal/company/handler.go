@@ -8,8 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 
-	"gobizmanager/internal/app/rbac"
-	"gobizmanager/internal/app/user"
+	"gobizmanager/internal/rbac"
+	"gobizmanager/internal/user"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"
 	"gobizmanager/pkg/shared"
@@ -22,6 +22,16 @@ type Handler struct {
 	rbacRepo  *rbac.Repository
 	userRepo  *user.Repository
 	Validator *validator.Validate
+}
+
+func NewHandler(repo *Repository, rbacRepo *rbac.Repository, userRepo *user.Repository, msgStore *language.MessageStore) *Handler {
+	return &Handler{
+		BaseHandler: shared.BaseHandler{MsgStore: msgStore},
+		repo:        repo,
+		rbacRepo:    rbacRepo,
+		userRepo:    userRepo,
+		Validator:   validator.New(),
+	}
 }
 
 func (h *Handler) CreateCompany(w http.ResponseWriter, r *http.Request) {

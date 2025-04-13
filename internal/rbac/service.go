@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 
+	model "gobizmanager/internal/models"
 	"gobizmanager/pkg/language"
 )
 
@@ -20,7 +21,7 @@ func NewService(repo *Repository, val *Validator) *Service {
 	}
 }
 
-func (s *Service) CreatePermission(ctx context.Context, companyID int64, name, description string, roleID int64) (*Permission, error) {
+func (s *Service) CreatePermission(ctx context.Context, companyID int64, name, description string, roleID int64) (*model.Permission, error) {
 	err := s.val.ValidateCompanyRequest(ctx, companyID)
 	if err != nil {
 		return nil, err
@@ -90,7 +91,7 @@ func (s *Service) UpdatePermissionModuleActions(ctx context.Context, permissionI
 	return nil
 }
 
-func (s *Service) ListRoles(ctx context.Context, companyID int64) ([]Role, error) {
+func (s *Service) ListRoles(ctx context.Context, companyID int64) ([]model.Role, error) {
 	err := s.val.ValidateCompanyRequest(ctx, companyID)
 	if err != nil {
 		return nil, err
@@ -104,7 +105,7 @@ func (s *Service) ListRoles(ctx context.Context, companyID int64) ([]Role, error
 	return roles, nil
 }
 
-func (s *Service) ListPermissions(ctx context.Context, companyID int64) ([]Permission, error) {
+func (s *Service) ListPermissions(ctx context.Context, companyID int64) ([]model.Permission, error) {
 	err := s.val.ValidateCompanyRequest(ctx, companyID)
 	if err != nil {
 		return nil, err
@@ -154,7 +155,7 @@ func (s *Service) CheckPermission(ctx context.Context, userID int64, moduleName,
 	return hasPermission, nil
 }
 
-func (s *Service) CreateRole(ctx context.Context, companyID int64, name, description string) (*Role, error) {
+func (s *Service) CreateRole(ctx context.Context, companyID int64, name, description string) (*model.Role, error) {
 	err := s.val.ValidateCompanyRequest(ctx, companyID)
 	if err != nil {
 		return nil, err
@@ -180,7 +181,7 @@ func (s *Service) RemovePermission(ctx context.Context, roleID, permissionID int
 	return nil
 }
 
-func (s *Service) GetRole(ctx context.Context, roleID int64) (*Role, error) {
+func (s *Service) GetRole(ctx context.Context, roleID int64) (*model.Role, error) {
 	err := s.val.ValidateRoleRequest(ctx, strconv.FormatInt(roleID, 10))
 	if err != nil {
 		return nil, err

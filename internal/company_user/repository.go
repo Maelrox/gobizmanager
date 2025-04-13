@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"gobizmanager/internal/app/pkg/model"
-	"gobizmanager/internal/app/rbac"
-	"gobizmanager/internal/app/user"
+	model "gobizmanager/internal/models"
+	"gobizmanager/internal/user"
 	"gobizmanager/pkg/encryption"
 
 	"gobizmanager/platform/config"
@@ -72,13 +71,13 @@ func (r *Repository) RegisterCompanyUser(req *RegisterCompanyUserRequest) (*Comp
 	}
 
 	// Get USER role ID
-	var userRole rbac.Role
+	var userRole model.Role
 	if err := tx.Where("name = ? AND company_id IS NULL", "USER").First(&userRole).Error; err != nil {
 		return nil, fmt.Errorf("failed to get USER role ID: %w", err)
 	}
 
 	// Assign USER role to the new user
-	userRoleAssignment := &rbac.UserRole{
+	userRoleAssignment := &model.UserRole{
 		UserID:    userID,
 		RoleID:    userRole.ID,
 		CreatedAt: time.Now(),

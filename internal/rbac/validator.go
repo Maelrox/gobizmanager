@@ -6,7 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"gobizmanager/internal/app/auth"
+	"gobizmanager/internal/auth"
+	model "gobizmanager/internal/models"
 	"gobizmanager/pkg/language"
 
 	"github.com/go-chi/chi/v5"
@@ -97,7 +98,7 @@ func (v *Validator) ValidateAndGetCompanyID(r *http.Request) (int64, error) {
 	return companyIDInt, nil
 }
 
-func (v *Validator) ValidatePermissionAccess(userID int64, permissionID int64) (*Permission, error) {
+func (v *Validator) ValidatePermissionAccess(userID int64, permissionID int64) (*model.Permission, error) {
 	permission, err := v.Repo.GetPermissionByID(permissionID)
 	if err != nil {
 		return nil, errors.New(language.PermissionNotFound)

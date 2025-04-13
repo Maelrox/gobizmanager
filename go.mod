@@ -1,17 +1,19 @@
 module gobizmanager
 
-go 1.21
+go 1.23.0
+
+toolchain go1.24.2
 
 require (
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
 	github.com/go-playground/validator/v10 v10.20.0
 	github.com/golang-jwt/jwt/v5 v5.0.0
-	github.com/mattn/go-sqlite3 v1.14.17
+	github.com/mattn/go-sqlite3 v1.14.27
 	go.uber.org/zap v1.26.0
 	golang.org/x/crypto v0.23.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
-	gorm.io/gorm v1.25.10
+	gorm.io/gorm v1.25.12
 )
 
 require (
@@ -24,5 +26,6 @@ require (
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
-	golang.org/x/text v0.15.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
+	gorm.io/driver/sqlite v1.5.7 // indirect
 )
