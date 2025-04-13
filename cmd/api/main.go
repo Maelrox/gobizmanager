@@ -2,26 +2,25 @@
 package main
 
 import (
-	"database/sql"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/go-chi/cors"
 	"go.uber.org/zap"
 
 	"gobizmanager/internal/auth"
 	"gobizmanager/internal/company"
-	"gobizmanager/internal/logger"
-	"gobizmanager/internal/permission"
+	"gobizmanager/internal/company_user"
 	"gobizmanager/internal/rbac"
-	"gobizmanager/internal/role"
 	"gobizmanager/internal/user"
 	"gobizmanager/pkg/context"
 	"gobizmanager/pkg/language"
+	"gobizmanager/pkg/logger"
 	"gobizmanager/pkg/migration"
 	"gobizmanager/platform/config"
+	"gobizmanager/platform/database"
 	"gobizmanager/platform/middleware/ratelimit"
 )
 
@@ -35,15 +34,22 @@ func main() {
 	}
 
 	// Initialize database
-	db, err := sql.Open("sqlite3", cfg.DBPath)
+	db, err := database.NewDB(cfg.DBPath)
 	if err != nil {
 		logger.Error("Failed to initialize database", zap.Error(err))
 		return
 	}
-	defer db.Close()
+
+	// Get underlying SQL DB for migrations
+	sqlDB, err := db.DB()
+	if err != nil {
+		logger.Error("Failed to get SQL DB", zap.Error(err))
+		return
+	}
+	defer sqlDB.Close()
 
 	// Apply migrations
-	if err := migration.ApplyMigrations(db); err != nil {
+	if err := migration.ApplyMigrations(sqlDB); err != nil {
 		logger.Error("Failed to apply migrations", zap.Error(err))
 		return
 	}
@@ -58,18 +64,31 @@ func main() {
 	userRepo := user.NewRepository(db, cfg)
 	rbacRepo := rbac.NewRepository(db)
 	companyRepo := company.NewRepository(db, cfg, rbacRepo)
-	roleRepo := role.NewRepository(db)
-	permissionRepo := permission.NewRepository(db)
+	companyUserRepo := company_user.NewRepository(db, cfg)
 
 	// Initialize handlers
 	authHandler := auth.NewHandler(userRepo, jwtManager, msgStore)
-	companyHandler := company.NewHandler(companyRepo, rbacRepo, userRepo, roleRepo, permissionRepo, msgStore)
-	rbacHandler := rbac.NewHandler(rbacRepo, msgStore)
+	companyHandler := company.NewHandler(companyRepo, rbacRepo, userRepo, msgStore)
+	roleHandler := rbac.NewRoleHandler(rbacRepo, msgStore)
+	permissionHandler := rbac.NewPermissionHandler(rbacRepo, msgStore)
+	companyUserHandler := company_user.NewHandler(companyUserRepo, rbacRepo, msgStore)
+	userHandler := user.NewHandler(userRepo)
 
 	// Create router
 	r := chi.NewRouter()
 
-	// Add middleware
+	// Add CORS middleware
+	corsMiddleware := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	})
+	r.Use(corsMiddleware.Handler)
+
+	// Add other middleware
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
 	r.Use(context.LanguageMiddleware())
@@ -86,7 +105,9 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(jwtManager, msgStore))
 		r.Mount("/companies", company.Routes(companyHandler, msgStore))
-		r.Mount("/rbac", rbac.Routes(rbacHandler))
+		r.Mount("/rbac", rbac.Routes(roleHandler, permissionHandler))
+		r.Mount("/company-users", company_user.Routes(companyUserHandler))
+		r.Mount("/users", user.Routes(userHandler))
 	})
 
 	// Start server

@@ -16,6 +16,7 @@ var migrations = []struct {
 			name TEXT NOT NULL,
 			email TEXT,
 			phone TEXT,
+			address TEXT,
 			identifier TEXT,
 			logo TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -27,6 +28,7 @@ var migrations = []struct {
 		stmt: `CREATE TABLE IF NOT EXISTS users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			email TEXT NOT NULL UNIQUE,
+			email_hash TEXT NOT NULL UNIQUE,
 			password TEXT NOT NULL,
 			phone TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -87,13 +89,39 @@ var migrations = []struct {
 		name: "Create permissions table",
 		stmt: `CREATE TABLE IF NOT EXISTS permissions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			role_id INTEGER NOT NULL,
+			company_id INTEGER,
+			name TEXT NOT NULL,
+			description TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+			UNIQUE(company_id, name)
+		)`,
+	},
+	{
+		name: "Create permission_module_actions table",
+		stmt: `CREATE TABLE IF NOT EXISTS permission_module_actions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			permission_id INTEGER NOT NULL,
 			module_action_id INTEGER NOT NULL,
-			created_at TIMESTAMP,
-			updated_at TIMESTAMP,
-			FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
 			FOREIGN KEY (module_action_id) REFERENCES module_actions(id) ON DELETE CASCADE,
-			UNIQUE(role_id, module_action_id)
+			UNIQUE(permission_id, module_action_id)
+		)`,
+	},
+	{
+		name: "Create role_permissions table",
+		stmt: `CREATE TABLE IF NOT EXISTS role_permissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			role_id INTEGER NOT NULL,
+			permission_id INTEGER NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+			FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
+			UNIQUE(role_id, permission_id)
 		)`,
 	},
 	{
@@ -135,14 +163,35 @@ var migrations = []struct {
 				(11, 3, 'update', 'Update role', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 				(12, 3, 'delete', 'Delete role', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-			-- Create ROOT role (with NULL company_id for system-wide access)
+			-- Create default roles
 			INSERT OR IGNORE INTO roles (id, company_id, name, description, created_at, updated_at)
-			VALUES (1, NULL, 'ROOT', 'System ROOT user with full access', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+			VALUES 
+				(1, null, 'ROOT', 'System root role with all permissions', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(2, null, 'ADMIN', 'Company administrator role', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(3, null, 'USER', 'Default user no permissions', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-			-- Grant all permissions to ROOT role
-			INSERT OR IGNORE INTO permissions (role_id, module_action_id, created_at, updated_at)
+			-- Create default permissions
+			INSERT OR IGNORE INTO permissions (id, company_id, name, description, created_at, updated_at)
+			VALUES 
+				(1, null, 'manage_companies', 'Full access to company management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(2, null, 'manage_users', 'Full access to user management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+				(3, null, 'manage_roles', 'Full access to role management', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+			-- Add module actions to permissions
+			INSERT OR IGNORE INTO permission_module_actions (permission_id, module_action_id, created_at, updated_at)
 			SELECT 1, id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-			FROM module_actions;
+			FROM module_actions
+			WHERE module_id = 1;
+
+			INSERT OR IGNORE INTO permission_module_actions (permission_id, module_action_id, created_at, updated_at)
+			SELECT 2, id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+			FROM module_actions
+			WHERE module_id = 2;
+
+			INSERT OR IGNORE INTO permission_module_actions (permission_id, module_action_id, created_at, updated_at)
+			SELECT 3, id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+			FROM module_actions
+			WHERE module_id = 3;
 		`,
 	},
 }
@@ -191,6 +240,46 @@ func ApplyMigrations(db *sql.DB) error {
 
 			fmt.Printf("Applied migration: %s\n", m.name)
 		}
+	}
+
+	// Create permission_groups table
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS permission_groups (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			company_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+			UNIQUE (company_id, name)
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create permission_groups table: %w", err)
+	}
+
+	// Create permission_group_permissions table
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS permission_group_permissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			group_id INTEGER NOT NULL,
+			permission_id INTEGER NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (group_id) REFERENCES permission_groups(id) ON DELETE CASCADE,
+			FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
+			UNIQUE (group_id, permission_id)
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create permission_group_permissions table: %w", err)
+	}
+
+	// Enable foreign key support for SQLite
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	if err != nil {
+		return fmt.Errorf("failed to enable foreign key support: %w", err)
 	}
 
 	return nil

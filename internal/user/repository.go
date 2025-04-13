@@ -2,100 +2,37 @@
 package user
 
 import (
-	"database/sql"
+	"crypto/sha256"
+	"fmt"
+	"time"
 
+	model "gobizmanager/internal/models"
 	"gobizmanager/pkg/encryption"
 	"gobizmanager/platform/config"
-	"time"
+
+	"gorm.io/gorm"
 )
 
 type Repository struct {
-	db  *sql.DB
+	db  *gorm.DB
 	cfg *config.Config
 }
 
-func NewRepository(db *sql.DB, cfg *config.Config) *Repository {
+func NewRepository(db *gorm.DB, cfg *config.Config) *Repository {
 	return &Repository{db: db, cfg: cfg}
 }
 
 // CreateUserWithTx creates a new user within a transaction
-func (r *Repository) CreateUserWithTx(tx *sql.Tx, username, password string) (int64, error) {
-	hashedPassword, err := HashPassword(password)
+func (r *Repository) CreateUserWithTx(tx *gorm.DB, username, password, phone string) (int64, error) {
+	hashedPassword, err := encryption.HashPassword(password)
 	if err != nil {
 		return 0, err
 	}
 
-	now := time.Now()
-	result, err := tx.Exec(
-		"INSERT INTO users (email, password, created_at, updated_at) VALUES (?, ?, ?, ?)",
-		username, hashedPassword, now, now,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
-}
-
-// GetUserByID returns a user by ID
-func (r *Repository) GetUserByID(id int64) (*User, error) {
-	user := &User{}
-	err := r.db.QueryRow(`
-		SELECT id, email, password, phone, created_at, updated_at 
-		FROM users WHERE id = ?
-	`, id).Scan(
-		&user.ID, &user.Email, &user.Password, &user.Phone,
-		&user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// Decrypt sensitive fields
-	if err := user.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
-		return nil, err
-	}
-
-	return user, nil
-}
-
-// GetUserByEmail returns a user by email
-func (r *Repository) GetUserByEmail(email string) (*User, error) {
-	// Encrypt the email for comparison
-	encryptedEmail, err := encryption.Encrypt(email, r.cfg.EncryptionKey)
-	if err != nil {
-		return nil, err
-	}
-
-	user := &User{}
-	err = r.db.QueryRow(`
-		SELECT id, email, password, phone, created_at, updated_at 
-		FROM users WHERE email = ?
-	`, encryptedEmail).Scan(
-		&user.ID, &user.Email, &user.Password, &user.Phone,
-		&user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// Decrypt sensitive fields
-	if err := user.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
-		return nil, err
-	}
-
-	return user, nil
-}
-
-// GetDB returns the database connection
-func (r *Repository) GetDB() *sql.DB {
-	return r.db
-}
-
-func (r *Repository) CreateUser(email, password, phone string) (int64, error) {
 	// Create a temporary user to encrypt fields
-	user := &User{
-		Email:    email,
-		Password: password,
+	user := &model.User{
+		Email:    username,
+		Password: hashedPassword,
 		Phone:    phone,
 	}
 
@@ -104,22 +41,110 @@ func (r *Repository) CreateUser(email, password, phone string) (int64, error) {
 		return 0, err
 	}
 
-	result, err := r.db.Exec(`
-		INSERT INTO users (email, password, phone) 
-		VALUES (?, ?, ?)
-	`, user.Email, user.Password, user.Phone)
+	// Create email hash for searching
+	emailHash := fmt.Sprintf("%x", sha256.Sum256([]byte(username)))
+
+	now := time.Now()
+	user.EmailHash = emailHash
+	user.CreatedAt = now
+	user.UpdatedAt = now
+
+	if err := tx.Create(user).Error; err != nil {
+		return 0, err
+	}
+	return user.ID, nil
+}
+
+// GetUserByID returns a user by ID
+func (r *Repository) GetUserByID(id int64) (*model.User, error) {
+	user := &model.User{}
+	if err := r.db.First(user, id).Error; err != nil {
+		return nil, err
+	}
+
+	// Decrypt sensitive fields
+	if err := user.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (r *Repository) GetUserByEmail(email string) (*model.User, error) {
+	emailHash := fmt.Sprintf("%x", sha256.Sum256([]byte(email)))
+
+	user := &model.User{}
+	if err := r.db.Where("email_hash = ?", emailHash).First(user).Error; err != nil {
+		return nil, err
+	}
+
+	// Decrypt sensitive fields
+	if err := user.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+// GetDB returns the underlying database connection
+func (r *Repository) GetDB() *gorm.DB {
+	return r.db
+}
+
+// CreateUser creates a new user
+func (r *Repository) CreateUser(email, password, phone string) (int64, error) {
+	hashedPassword, err := encryption.HashPassword(password)
 	if err != nil {
 		return 0, err
 	}
-	return result.LastInsertId()
+
+	// Create a temporary user to encrypt fields
+	user := &model.User{
+		Email:    email,
+		Password: hashedPassword,
+		Phone:    phone,
+	}
+
+	// Encrypt sensitive fields
+	if err := user.EncryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
+		return 0, err
+	}
+
+	// Create email hash for searching
+	emailHash := fmt.Sprintf("%x", sha256.Sum256([]byte(email)))
+	user.EmailHash = emailHash
+
+	now := time.Now()
+	user.CreatedAt = now
+	user.UpdatedAt = now
+
+	if err := r.db.Create(user).Error; err != nil {
+		return 0, err
+	}
+	return user.ID, nil
 }
 
+// UpdateUser updates a user
 func (r *Repository) UpdateUser(id int64, email, password, phone string) error {
-	// Create a temporary user to encrypt fields
-	user := &User{
-		Email:    email,
-		Password: password,
-		Phone:    phone,
+	user := &model.User{}
+	if err := r.db.First(user, id).Error; err != nil {
+		return err
+	}
+
+	// Update fields
+	if email != "" {
+		user.Email = email
+		user.EmailHash = fmt.Sprintf("%x", sha256.Sum256([]byte(email)))
+	}
+	if password != "" {
+		hashedPassword, err := encryption.HashPassword(password)
+		if err != nil {
+			return err
+		}
+		user.Password = hashedPassword
+	}
+	if phone != "" {
+		user.Phone = phone
 	}
 
 	// Encrypt sensitive fields
@@ -127,111 +152,111 @@ func (r *Repository) UpdateUser(id int64, email, password, phone string) error {
 		return err
 	}
 
-	_, err := r.db.Exec(`
-		UPDATE users 
-		SET email = ?, password = ?, phone = ?, updated_at = CURRENT_TIMESTAMP 
-		WHERE id = ?
-	`, user.Email, user.Password, user.Phone, id)
-	return err
+	user.UpdatedAt = time.Now()
+	return r.db.Save(user).Error
 }
 
-// GetRootRoleID returns the ID of the ROOT role
-func (r *Repository) GetRootRoleID(tx *sql.Tx) (int64, error) {
-	var rootRoleID int64
-	err := tx.QueryRow("SELECT id FROM roles WHERE name = 'ROOT' AND company_id IS NULL").Scan(&rootRoleID)
-	if err != nil {
+// GetRootRoleID returns the root role ID
+func (r *Repository) GetRootRoleID(tx *gorm.DB) (int64, error) {
+	var roleID int64
+	if err := tx.Model(&model.Role{}).Where("name = ?", "ROOT").Select("id").First(&roleID).Error; err != nil {
 		return 0, err
 	}
-	return rootRoleID, nil
+	return roleID, nil
 }
 
-// AssignRootRole assigns the ROOT role to a user
-func (r *Repository) AssignRootRole(tx *sql.Tx, userID, roleID int64) error {
-	_, err := tx.Exec(
-		"INSERT INTO user_roles (user_id, role_id, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-		userID, roleID,
-	)
-	return err
+// AssignRootRole assigns the root role to a user
+func (r *Repository) AssignRootRole(tx *gorm.DB, userID, roleID int64) error {
+	userRole := &model.UserRole{
+		UserID:    userID,
+		RoleID:    roleID,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	return tx.Create(userRole).Error
 }
 
-// RegisterRootUser registers a new ROOT user with all necessary operations in a transaction
+// RegisterRootUser registers a root user
 func (r *Repository) RegisterRootUser(username, password string) (int64, error) {
-	// Start transaction
-	tx, err := r.db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback() // This ensures rollback if we don't commit
-
-	// Get ROOT role ID
-	rootRoleID, err := r.GetRootRoleID(tx)
-	if err != nil {
-		return 0, err
+	tx := r.db.Begin()
+	if tx.Error != nil {
+		return 0, tx.Error
 	}
 
 	// Create user
-	userID, err := r.CreateUserWithTx(tx, username, password)
+	userID, err := r.CreateUserWithTx(tx, username, password, "")
 	if err != nil {
+		tx.Rollback()
 		return 0, err
 	}
 
-	// Assign ROOT role
-	if err := r.AssignRootRole(tx, userID, rootRoleID); err != nil {
+	// Get root role ID
+	roleID, err := r.GetRootRoleID(tx)
+	if err != nil {
+		tx.Rollback()
 		return 0, err
 	}
 
-	// Commit transaction
-	if err := tx.Commit(); err != nil {
+	// Assign root role
+	if err := r.AssignRootRole(tx, userID, roleID); err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	if err := tx.Commit().Error; err != nil {
 		return 0, err
 	}
 
 	return userID, nil
 }
 
-// RegisterUser handles the complete user registration process
-func (r *Repository) RegisterUser(username, password string) (int64, error) {
-	// Start transaction
-	tx, err := r.db.Begin()
-	if err != nil {
-		return 0, err
+// RegisterUser registers a new user
+func (r *Repository) RegisterUser(username, password, phone string) (int64, error) {
+	tx := r.db.Begin()
+	if tx.Error != nil {
+		return 0, tx.Error
 	}
-	defer tx.Rollback()
 
 	// Create user
-	userID, err := r.CreateUserWithTx(tx, username, password)
+	userID, err := r.CreateUserWithTx(tx, username, password, phone)
 	if err != nil {
+		tx.Rollback()
 		return 0, err
 	}
 
-	// Get ROOT role ID
-	rootRoleID, err := r.GetRootRoleID(tx)
-	if err != nil {
-		return 0, err
-	}
-
-	// Assign ROOT role
-	if err := r.AssignRootRole(tx, userID, rootRoleID); err != nil {
-		return 0, err
-	}
-
-	// Commit transaction
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit().Error; err != nil {
 		return 0, err
 	}
 
 	return userID, nil
 }
 
-// IsRoot checks if the user has the ROOT role
 func (r *Repository) IsRoot(userID int64) (bool, error) {
-	query := `
-		SELECT EXISTS (
-			SELECT 1 FROM user_roles ur
-			JOIN roles r ON ur.role_id = r.id
-			WHERE ur.user_id = ? AND r.name = 'ROOT' AND r.company_id IS NULL
-		)
-	`
-	var isRoot bool
-	err := r.db.QueryRow(query, userID).Scan(&isRoot)
-	return isRoot, err
+	var count int64
+	if err := r.db.Model(&model.UserRole{}).
+		Joins("JOIN roles ON user_roles.role_id = roles.id").
+		Where("user_roles.user_id = ? AND roles.name = ?", userID, "ROOT").
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// SearchUsers searches for users by company ID
+func (r *Repository) SearchUsers(companyID string) ([]struct {
+	ID    uint   `json:"id"`
+	Email string `json:"email"`
+}, error) {
+	var users []struct {
+		ID    uint   `json:"id"`
+		Email string `json:"email"`
+	}
+	if err := r.db.Model(&model.User{}).
+		Select("users.id, users.email").
+		Joins("JOIN company_users ON users.id = company_users.user_id").
+		Where("company_users.company_id = ?", companyID).
+		Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
 }

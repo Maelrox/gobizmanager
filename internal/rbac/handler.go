@@ -2,171 +2,129 @@ package rbac
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
+	"go.uber.org/zap"
+
 	"github.com/go-chi/chi/v5"
-	"github.com/go-playground/validator/v10"
 
 	"gobizmanager/internal/auth"
-	"gobizmanager/pkg/context"
+	pkgctx "gobizmanager/pkg/context"
 	"gobizmanager/pkg/language"
+	"gobizmanager/pkg/logger"
 	"gobizmanager/pkg/utils"
 )
 
-type Handler struct {
-	Repo      *Repository
-	Validator *validator.Validate
-	MsgStore  *language.MessageStore
+type RbacBaseHandler struct {
+	Service  *Service
+	MsgStore *language.MessageStore
 }
 
-func NewHandler(repo *Repository, msgStore *language.MessageStore) *Handler {
-	return &Handler{
-		Repo:      repo,
-		Validator: validator.New(),
-		MsgStore:  msgStore,
+func NewBaseHandler(repo *Repository, msgStore *language.MessageStore) *RbacBaseHandler {
+	val := NewValidator(repo, msgStore)
+	service := NewService(repo, val)
+	return &RbacBaseHandler{
+		Service:  service,
+		MsgStore: msgStore,
 	}
 }
 
-// Middleware to check if user has permission
-func (h *Handler) RequirePermission(moduleName, actionName string) func(http.Handler) http.Handler {
+// RequirePermission is a middleware to check if user has permission to access a resource
+func (h *RbacBaseHandler) RequirePermission(moduleName, actionName string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			lang := context.GetLanguage(r.Context())
-
 			userID, ok := auth.GetUserID(r.Context())
 			if !ok {
-				utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, "auth.unauthorized"))
+				utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidRequest))
 				return
 			}
 
-			companyIDStr := chi.URLParam(r, "companyID")
-			if companyIDStr == "" {
-				utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "company.company_id_required"))
-				return
-			}
-
-			companyID, err := strconv.ParseInt(companyIDStr, 10, 64)
+			hasPermission, err := h.Service.CheckPermission(r.Context(), userID, moduleName, actionName)
 			if err != nil {
-				utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "company.invalid_company_id"))
+				logger.Error("Error checking permission", zap.Error(err))
+				utils.RespondError(w, r, h.MsgStore, errors.New(language.PermissionCheckFailed))
 				return
 			}
-
-			hasPermission, err := h.Repo.HasPermission(userID, companyID, moduleName, actionName)
-			if err != nil {
-				utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.permission_check_failed"))
-				return
-			}
-
 			if !hasPermission {
-				utils.JSONError(w, http.StatusForbidden, h.MsgStore.GetMessage(lang, "rbac.insufficient_permissions"))
+				utils.RespondError(w, r, h.MsgStore, errors.New(language.PermissionDenied))
 				return
 			}
-
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-// Create company user
-func (h *Handler) CreateCompanyUser(w http.ResponseWriter, r *http.Request) {
-	lang := context.GetLanguage(r.Context())
-
-	var req CreateCompanyUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.invalid_request"))
-		return
-	}
-
-	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.validation_failed"))
-		return
-	}
-
-	// Check if user is already associated with the company
-	_, err := h.Repo.GetCompanyUserByCompanyAndUser(req.CompanyID, req.UserID)
-	if err == nil {
-		utils.JSONError(w, http.StatusConflict, h.MsgStore.GetMessage(lang, "rbac.user_already_associated"))
-		return
-	}
-
-	id, err := h.Repo.CreateCompanyUser(req.CompanyID, req.UserID, req.IsMain)
-	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.create_company_user_failed"))
-		return
-	}
-
-	utils.JSON(w, http.StatusCreated, map[string]int64{"id": id})
-}
-
-// Create role
-func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
-	lang := context.GetLanguage(r.Context())
-
-	var req CreateRoleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.invalid_request"))
-		return
-	}
-
-	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.validation_failed"))
-		return
-	}
-
-	id, err := h.Repo.CreateRole(req.CompanyID, req.Name, req.Description)
-	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.create_role_failed"))
-		return
-	}
-
-	utils.JSON(w, http.StatusCreated, map[string]int64{"id": id})
-}
-
-// Create permission
-func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
-	lang := context.GetLanguage(r.Context())
-
+func (h *RbacBaseHandler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 	var req CreatePermissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.invalid_request"))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.ValidationFailed))
 		return
 	}
 
-	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.validation_failed"))
-		return
-	}
-
-	id, err := h.Repo.CreatePermission(req.RoleID, req.ModuleActionID)
+	permission, err := h.Service.CreatePermission(r.Context(), req.CompanyID, req.Name, req.Description, req.RoleID)
 	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.create_permission_failed"))
+		logger.Error("Error creating permission", zap.Error(err))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.PermissionCreateFailed))
 		return
 	}
 
-	utils.JSON(w, http.StatusCreated, map[string]int64{"id": id})
+	utils.JSON(w, http.StatusCreated, permission)
 }
 
-// Assign role to user
-func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
-	lang := context.GetLanguage(r.Context())
-
-	var req AssignRoleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.invalid_request"))
-		return
-	}
-
-	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, "rbac.validation_failed"))
-		return
-	}
-
-	id, err := h.Repo.AssignRole(req.CompanyUserID, req.RoleID)
+func (h *RbacBaseHandler) GetModuleActions(w http.ResponseWriter, r *http.Request) {
+	actions, err := h.Service.GetModuleActions(r.Context())
 	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, "rbac.assign_role_failed"))
+		logger.Error("Error getting module actions", zap.Error(err))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.PermissionListFailed))
 		return
 	}
 
-	utils.JSON(w, http.StatusCreated, map[string]int64{"id": id})
+	utils.JSON(w, http.StatusOK, actions)
+}
+
+func (h *RbacBaseHandler) GetPermissionModuleActions(w http.ResponseWriter, r *http.Request) {
+	permissionID := chi.URLParam(r, "permissionID")
+	if permissionID == "" {
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.ValidationFailed))
+	}
+
+	permissionIDInt, err := strconv.ParseInt(permissionID, 10, 64)
+	if err != nil {
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.PermissionNotFound))
+		return
+	}
+
+	moduleActions, err := h.Service.GetPermissionModuleActions(r.Context(), permissionIDInt)
+	if err != nil {
+		panic(err)
+	}
+
+	utils.JSON(w, http.StatusOK, moduleActions)
+}
+
+func (h *RbacBaseHandler) UpdatePermissionModuleActions(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ModuleActionIDs []int64 `json:"module_action_ids" validate:"required"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.ValidationFailed))
+		return
+	}
+
+	permissionID, err := strconv.ParseInt(chi.URLParam(r, "permissionID"), 10, 64)
+	if err != nil {
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.ValidationFailed))
+		return
+	}
+
+	if err := h.Service.UpdatePermissionModuleActions(r.Context(), permissionID, req.ModuleActionIDs); err != nil {
+		logger.Error("Error updating permission module actions", zap.Error(err))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.PermissionAssignFailed))
+		return
+	}
+	msg, httpStatus := h.MsgStore.GetMessage(pkgctx.GetLanguage(r.Context()), language.PermissionAssigned)
+	utils.JSON(w, httpStatus, msg)
+
 }

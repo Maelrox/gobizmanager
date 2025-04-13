@@ -15,11 +15,11 @@ func Routes(handler *Handler, msgStore *language.MessageStore) http.Handler {
 	// Apply rate limiting middleware to all company routes
 	r.Group(func(r chi.Router) {
 		r.Use(ratelimit.New(100))
-		r.Post("/", handler.createCompany)
-		r.Get("/", handler.listCompanies)
-		r.Get("/{id}", handler.getCompany)
-		r.Put("/{id}", handler.updateCompany)
-		r.Delete("/{id}", handler.deleteCompany)
+		r.Post("/", handler.CreateCompany)
+		r.Get("/", handler.ListCompanies)
+		r.Get("/{id}", handler.GetCompany)
+		r.Put("/{id}", handler.UpdateCompany)
+		r.Delete("/{id}", handler.DeleteCompany)
 	})
 
 	return r

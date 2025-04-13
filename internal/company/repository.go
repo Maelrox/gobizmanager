@@ -2,18 +2,24 @@ package company
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 
+	model "gobizmanager/internal/models"
 	"gobizmanager/internal/rbac"
+	"gobizmanager/pkg/language"
 	"gobizmanager/platform/config"
+
+	"gorm.io/gorm"
 )
 
 type Repository struct {
-	db       *sql.DB
+	db       *gorm.DB
 	cfg      *config.Config
 	RBACRepo *rbac.Repository
 }
 
-func NewRepository(db *sql.DB, cfg *config.Config, rbacRepo *rbac.Repository) *Repository {
+func NewRepository(db *gorm.DB, cfg *config.Config, rbacRepo *rbac.Repository) *Repository {
 	return &Repository{
 		db:       db,
 		cfg:      cfg,
@@ -21,51 +27,99 @@ func NewRepository(db *sql.DB, cfg *config.Config, rbacRepo *rbac.Repository) *R
 	}
 }
 
-func (r *Repository) CreateCompanyWithTx(tx *sql.Tx, name, phone, email, identifier string) (int64, error) {
-	// Create a temporary company to encrypt fields
+func (r *Repository) CreateCompany(req *CreateCompanyRequest, userID int64) (*Company, error) {
 	company := &Company{
-		Name:       name,
-		Phone:      phone,
-		Email:      email,
-		Identifier: identifier,
+		Name:       req.Name,
+		Email:      req.Email,
+		Phone:      req.Phone,
+		Address:    req.Address,
+		Logo:       sql.NullString{String: req.Logo, Valid: req.Logo != ""},
+		Identifier: req.Identifier,
 	}
-
-	// Encrypt sensitive fields
 	if err := company.EncryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
-		return 0, err
+		return nil, fmt.Errorf("failed to encrypt company fields: %w", err)
 	}
 
-	result, err := tx.Exec(`
-		INSERT INTO companies (name, phone, email, identifier) 
-		VALUES (?, ?, ?, ?)
-	`, company.Name, company.Phone, company.Email, company.Identifier)
-	if err != nil {
-		return 0, err
+	// Start transaction
+	tx := r.db.Begin()
+	if tx.Error != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", tx.Error)
 	}
-	return result.LastInsertId()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Create company
+	if err := tx.Create(company).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to create company: %w", err)
+	}
+
+	// Create company-user relationship
+	companyUser := &rbac.CompanyUser{
+		CompanyID: company.ID,
+		UserID:    userID,
+		IsMain:    true,
+	}
+	if err := tx.Create(companyUser).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to create company-user relationship: %w", err)
+	}
+
+	// Create ADMIN role for the company
+	adminRole := &model.Role{
+		CompanyID:   company.ID,
+		Name:        "ADMIN",
+		Description: "Company administrator",
+	}
+	if err := tx.Create(adminRole).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to create ADMIN role: %w", err)
+	}
+
+	// Get all generic permissions
+	var permissions []model.Permission
+	if err := tx.Where("company_id IS NULL").Find(&permissions).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to get permissions: %w", err)
+	}
+
+	// Assign all permissions to ADMIN role
+	for _, permission := range permissions {
+		rolePermission := &model.Permission{
+			CompanyID:   company.ID,
+			Name:        permission.Name,
+			Description: permission.Description,
+		}
+		if err := tx.Create(rolePermission).Error; err != nil {
+			tx.Rollback()
+			return nil, fmt.Errorf("failed to assign permission to ADMIN role: %w", err)
+		}
+	}
+	// Assign ADMIN role to user
+	userRole := &model.UserRole{
+		CompanyUserID: companyUser.ID,
+		RoleID:        adminRole.ID,
+	}
+	if err := tx.Create(userRole).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to assign ADMIN role to user: %w", err)
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	if err := company.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
+		return nil, fmt.Errorf("failed to decrypt: %w", err)
+	}
+	return company, nil
 }
 
-func (r *Repository) CreateCompany(name, phone, email, identifier string) (int64, error) {
-	result, err := r.db.Exec(`
-		INSERT INTO companies (name, phone, email, identifier) 
-		VALUES (?, ?, ?, ?)
-	`, name, phone, email, identifier)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
-}
-
-func (r *Repository) GetCompany(id string) (*Company, error) {
-	company := &Company{}
-	err := r.db.QueryRow(`
-		SELECT id, name, phone, email, identifier, logo, created_at, updated_at 
-		FROM companies WHERE id = ?
-	`, id).Scan(
-		&company.ID, &company.Name, &company.Phone, &company.Email,
-		&company.Identifier, &company.Logo, &company.CreatedAt, &company.UpdatedAt,
-	)
-	if err != nil {
+func (r *Repository) GetCompany(id int64) (*Company, error) {
+	var company Company
+	if err := r.db.First(&company, id).Error; err != nil {
 		return nil, err
 	}
 
@@ -74,41 +128,38 @@ func (r *Repository) GetCompany(id string) (*Company, error) {
 		return nil, err
 	}
 
-	return company, nil
+	return &company, nil
 }
 
-func (r *Repository) UpdateCompany(id string, name, phone, email, identifier string) error {
+func (r *Repository) UpdateCompany(id int64, req *UpdateCompanyRequest) (*Company, error) {
 	// Create a temporary company to encrypt fields
 	company := &Company{
-		Name:       name,
-		Phone:      phone,
-		Email:      email,
-		Identifier: identifier,
+		Name:       req.Name,
+		Phone:      req.Phone,
+		Email:      req.Email,
+		Identifier: req.Identifier,
 	}
 
 	// Encrypt sensitive fields
 	if err := company.EncryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
-		return err
+		return nil, err
 	}
 
-	_, err := r.db.Exec(`
-		UPDATE companies 
-		SET name = ?, phone = ?, email = ?, identifier = ?, updated_at = CURRENT_TIMESTAMP 
-		WHERE id = ?
-	`, company.Name, company.Phone, company.Email, company.Identifier, id)
-	return err
+	if err := r.db.Model(&Company{}).Where("id = ?", id).Updates(company).Error; err != nil {
+		return nil, err
+	}
+
+	if err := company.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
+		return nil, fmt.Errorf("failed to decrypt: %w", err)
+	}
+	return r.GetCompany(id)
 }
 
 func (r *Repository) UpdateCompanyLogo(id string, logo string) error {
-	_, err := r.db.Exec(`
-		UPDATE companies 
-		SET logo = ?, updated_at = CURRENT_TIMESTAMP 
-		WHERE id = ?
-	`, logo, id)
-	return err
+	return r.db.Model(&Company{}).Where("id = ?", id).Update("logo", logo).Error
 }
 
-func (r *Repository) DeleteCompanyWithTx(tx *sql.Tx, companyID int64) error {
+func (r *Repository) DeleteCompanyWithTx(tx *gorm.DB, companyID int64) error {
 	// Delete company-user relationships
 	if err := r.RBACRepo.DeleteCompanyUsersWithTx(tx, companyID); err != nil {
 		return err
@@ -120,70 +171,94 @@ func (r *Repository) DeleteCompanyWithTx(tx *sql.Tx, companyID int64) error {
 	}
 
 	// Delete the company
-	_, err := tx.Exec("DELETE FROM companies WHERE id = ?", companyID)
-	return err
+	return tx.Delete(&Company{}, companyID).Error
 }
 
-func (r *Repository) ListCompanies() ([]Company, error) {
-	rows, err := r.db.Query(`
-		SELECT id, name, phone, email, identifier, logo, created_at, updated_at 
-		FROM companies
-	`)
+func (r *Repository) ListCompanies(userID int64) ([]*Company, error) {
+	var companies []*Company
+	err := r.db.Joins("JOIN company_users ON companies.id = company_users.company_id").
+		Where("company_users.user_id = ?", userID).
+		Find(&companies).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var companies []Company
-	for rows.Next() {
-		var c Company
-		if err := rows.Scan(
-			&c.ID, &c.Name, &c.Phone, &c.Email,
-			&c.Identifier, &c.Logo, &c.CreatedAt, &c.UpdatedAt,
-		); err != nil {
+	// Decrypt sensitive fields for each company
+	for _, company := range companies {
+		if err := company.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
 			return nil, err
 		}
-
-		// Decrypt sensitive fields
-		if err := c.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
-			return nil, err
-		}
-
-		companies = append(companies, c)
 	}
+
 	return companies, nil
 }
 
-// ListCompaniesForUser returns all companies for a given user
 func (r *Repository) ListCompaniesForUser(userID int64) ([]Company, error) {
-	query := `
-		SELECT DISTINCT c.id, c.name, c.phone, c.email, c.identifier, c.logo, c.created_at, c.updated_at 
-		FROM companies c
-		JOIN company_users cu ON c.id = cu.company_id
-		WHERE cu.user_id = ?
-	`
-	rows, err := r.db.Query(query, userID)
+	var companies []Company
+	err := r.db.Joins("JOIN company_users ON companies.id = company_users.company_id").
+		Where("company_users.user_id = ?", userID).
+		Find(&companies).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var companies []Company
-	for rows.Next() {
-		var c Company
-		if err := rows.Scan(
-			&c.ID, &c.Name, &c.Phone, &c.Email,
-			&c.Identifier, &c.Logo, &c.CreatedAt, &c.UpdatedAt,
-		); err != nil {
+	// Decrypt sensitive fields for each company
+	for i := range companies {
+		if err := companies[i].DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
 			return nil, err
 		}
-
-		// Decrypt sensitive fields
-		if err := c.DecryptSensitiveFields(r.cfg.EncryptionKey); err != nil {
-			return nil, err
-		}
-
-		companies = append(companies, c)
 	}
+
 	return companies, nil
+}
+
+func (r *Repository) CompanyExistsForUser(userID int64, name string) (bool, error) {
+	var count int64
+	err := r.db.Model(&Company{}).
+		Joins("JOIN company_users ON companies.id = company_users.company_id").
+		Where("company_users.user_id = ? AND companies.name = ?", userID, name).
+		Count(&count).Error
+	if err != nil {
+		return false, errors.New(language.CompanyListFailed)
+	}
+	return count > 0, nil
+}
+
+func (r *Repository) CompanyExistsForUserByID(userID int64, companyID int64) (bool, error) {
+	var count int64
+	err := r.db.Model(&Company{}).
+		Joins("JOIN company_users ON companies.id = company_users.company_id").
+		Where("company_users.user_id = ? AND company_users.companies.id = ?", userID, companyID).
+		Count(&count).Error
+	if err != nil {
+		return false, errors.New(language.CompanyListFailed)
+	}
+	return count > 0, nil
+}
+
+func (r *Repository) AddUserToCompany(tx *gorm.DB, companyID, userID int64) error {
+	companyUser := &rbac.CompanyUser{
+		CompanyID: companyID,
+		UserID:    userID,
+	}
+	return tx.Create(companyUser).Error
+}
+
+func (r *Repository) DeleteCompany(companyID int64) error {
+	tx := r.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := r.DeleteCompanyWithTx(tx, companyID); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }

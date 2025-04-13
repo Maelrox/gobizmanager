@@ -1,11 +1,14 @@
 package utils
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
+	pkgctx "gobizmanager/pkg/context"
 	"gobizmanager/pkg/language"
 
 	"github.com/go-playground/validator/v10"
@@ -19,7 +22,7 @@ func GetValidationMessage(err validator.FieldError, lang string, msgStore *langu
 
 	// Try to get a custom message based on the validation tag and field name
 	msgKey := fmt.Sprintf("validation.%s.%s", validationTag, strings.ToLower(fieldName))
-	if msg := msgStore.GetMessage(lang, msgKey); msg != "" {
+	if msg, _ := msgStore.GetMessage(lang, msgKey); msg != "" {
 		return msg
 	}
 
@@ -31,7 +34,8 @@ func GetValidationMessage(err validator.FieldError, lang string, msgStore *langu
 		paramStr := err.Param()
 		param, err := strconv.Atoi(paramStr)
 		if err != nil {
-			return msgStore.GetMessage(lang, language.MsgValidationFailed)
+			msg, _ := msgStore.GetMessage(lang, language.ValidationFailed)
+			return msg
 		}
 		if validationTag == "min" {
 			return fmt.Sprintf("%s must be at least %d characters", strings.ToLower(fieldName), param)
@@ -40,17 +44,33 @@ func GetValidationMessage(err validator.FieldError, lang string, msgStore *langu
 	case "email":
 		return fmt.Sprintf("%s must be a valid email address", strings.ToLower(fieldName))
 	default:
-		return msgStore.GetMessage(lang, language.MsgValidationFailed)
+		msg, _ := msgStore.GetMessage(lang, language.ValidationFailed)
+		return msg
 	}
 }
 
-// ValidationError sends a validation error response
-func ValidationError(w http.ResponseWriter, err error, lang string, msgStore *language.MessageStore) {
+func ValidationError(w http.ResponseWriter, r *http.Request, err error, msgStore *language.MessageStore) {
+	lang := pkgctx.GetLanguage(r.Context())
 	if validationErrors, ok := err.(validator.ValidationErrors); ok {
-		// Get the first error message
 		errorMsg := GetValidationMessage(validationErrors[0], lang, msgStore)
 		JSONError(w, http.StatusBadRequest, errorMsg)
 		return
 	}
-	JSONError(w, http.StatusBadRequest, msgStore.GetMessage(lang, language.MsgValidationFailed))
+	msg, httpStatus := msgStore.GetMessage(lang, language.ValidationFailed)
+	JSONError(w, httpStatus, msg)
+}
+
+func GetValidationError(err error, lang string, msgStore *language.MessageStore) string {
+	if validationErrors, ok := err.(validator.ValidationErrors); ok {
+		errorMsg := GetValidationMessage(validationErrors[0], lang, msgStore)
+		return errorMsg
+	}
+	return "undefined error"
+}
+
+func ParseRequest(r *http.Request, req interface{}) error {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return errors.New(language.BadRequest)
+	}
+	return nil
 }

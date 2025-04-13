@@ -1,0 +1,25 @@
+package language
+
+const (
+	MsgPermissionUpdateFailed        = "permission_update_failed"
+	MsgPermissionUpdated             = "permission_updated"
+	MsgValidationFailed              = "validation_failed"
+	MsgAuthUserNotFound              = "auth_user_not_found"
+	MsgPermissionCheckFailed         = "permission_check_failed"
+	MsgPermissionDenied              = "permission_denied"
+	MsgPermissionCreateFailed        = "permission_create_failed"
+	MsgRoleCreateFailed              = "role_create_failed"
+	MsgPermissionRemoveFailed        = "permission_remove_failed"
+	MsgPermissionRemoved             = "permission_removed"
+	MsgValidationInvalidID           = "validation_invalid_id"
+	MsgRoleNotFound                  = "role_not_found"
+	MsgRoleListFailed                = "role_list_failed"
+	MsgPermissionListFailed          = "permission_list_failed"
+	MsgCompanyUserNotFound           = "company_user_not_found"
+	MsgRoleAssignFailed              = "role_assign_failed"
+	MsgRoleAssigned                  = "role_assigned"
+	MsgPermissionNotFound            = "permission_not_found"
+	MsgPermissionAlreadyAssociated   = "permission_already_associated"
+	MsgModuleActionNotFound          = "module_action_not_found"
+	MsgPermissionModuleActionCreated = "permission_module_action_created"
+)

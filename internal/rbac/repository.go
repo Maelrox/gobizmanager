@@ -1,65 +1,57 @@
 package rbac
 
 import (
-	"database/sql"
+	"fmt"
+	"strconv"
 	"time"
-)
 
-// Module names
-const (
-	ModuleCompany = "company"
-	ModuleUser    = "user"
-	ModuleRole    = "role"
-)
+	"gorm.io/gorm"
 
-// Action names
-const (
-	ActionCreate = "create"
-	ActionRead   = "read"
-	ActionUpdate = "update"
-	ActionDelete = "delete"
+	model "gobizmanager/internal/models"
 )
 
 type Repository struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewRepository(db *sql.DB) *Repository {
+func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
 // CompanyUser operations
 func (r *Repository) CreateCompanyUser(companyID, userID int64, isMain bool) (int64, error) {
 	now := time.Now()
-	result, err := r.db.Exec(
-		"INSERT INTO company_users (company_id, user_id, is_main, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		companyID, userID, isMain, now, now,
-	)
-	if err != nil {
+	companyUser := &CompanyUser{
+		CompanyID: companyID,
+		UserID:    userID,
+		IsMain:    isMain,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := r.db.Create(companyUser).Error; err != nil {
 		return 0, err
 	}
-	return result.LastInsertId()
+	return companyUser.ID, nil
 }
 
-func (r *Repository) CreateCompanyUserWithTx(tx *sql.Tx, companyID, userID int64, isMain bool) (int64, error) {
+func (r *Repository) CreateCompanyUserWithTx(tx *gorm.DB, companyID, userID int64, isMain bool) (int64, error) {
 	now := time.Now()
-	result, err := tx.Exec(
-		"INSERT INTO company_users (company_id, user_id, is_main, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		companyID, userID, isMain, now, now,
-	)
-	if err != nil {
+	companyUser := &CompanyUser{
+		CompanyID: companyID,
+		UserID:    userID,
+		IsMain:    isMain,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := tx.Create(companyUser).Error; err != nil {
 		return 0, err
 	}
-	return result.LastInsertId()
+	return companyUser.ID, nil
 }
 
 func (r *Repository) GetCompanyUserByID(id int64) (*CompanyUser, error) {
 	var cu CompanyUser
-	err := r.db.QueryRow(
-		"SELECT id, company_id, user_id, is_main, created_at, updated_at FROM company_users WHERE id = ?",
-		id,
-	).Scan(&cu.ID, &cu.CompanyID, &cu.UserID, &cu.IsMain, &cu.CreatedAt, &cu.UpdatedAt)
-	if err != nil {
+	if err := r.db.First(&cu, id).Error; err != nil {
 		return nil, err
 	}
 	return &cu, nil
@@ -67,105 +59,113 @@ func (r *Repository) GetCompanyUserByID(id int64) (*CompanyUser, error) {
 
 func (r *Repository) GetCompanyUserByCompanyAndUser(companyID, userID int64) (*CompanyUser, error) {
 	var cu CompanyUser
-	err := r.db.QueryRow(
-		"SELECT id, company_id, user_id, is_main, created_at, updated_at FROM company_users WHERE company_id = ? AND user_id = ?",
-		companyID, userID,
-	).Scan(&cu.ID, &cu.CompanyID, &cu.UserID, &cu.IsMain, &cu.CreatedAt, &cu.UpdatedAt)
-	if err != nil {
+	if err := r.db.Where("company_id = ? AND user_id = ?", companyID, userID).First(&cu).Error; err != nil {
 		return nil, err
 	}
 	return &cu, nil
 }
 
 // Role operations
-func (r *Repository) CreateRole(companyID int64, name, description string) (int64, error) {
+func (r *Repository) CreateRole(companyID int64, name, description string) (*model.Role, error) {
 	now := time.Now()
-	result, err := r.db.Exec(
-		"INSERT INTO roles (company_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		companyID, name, description, now, now,
-	)
-	if err != nil {
-		return 0, err
+	role := &model.Role{
+		CompanyID:   companyID,
+		Name:        name,
+		Description: description,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
-	return result.LastInsertId()
+	if err := r.db.Create(role).Error; err != nil {
+		return nil, err
+	}
+	return role, nil
 }
 
-func (r *Repository) GetRoleByID(id int64) (*Role, error) {
-	var role Role
-	err := r.db.QueryRow(
-		"SELECT id, company_id, name, description, created_at, updated_at FROM roles WHERE id = ?",
-		id,
-	).Scan(&role.ID, &role.CompanyID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt)
-	if err != nil {
+func (r *Repository) GetRoleByID(id int64) (*model.Role, error) {
+	var role model.Role
+	if err := r.db.First(&role, id).Error; err != nil {
 		return nil, err
 	}
 	return &role, nil
 }
 
 // Permission operations
-func (r *Repository) CreatePermission(roleID, moduleActionID int64) (int64, error) {
-	now := time.Now()
-	result, err := r.db.Exec(
-		"INSERT INTO permissions (role_id, module_action_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
-		roleID, moduleActionID, now, now,
-	)
-	if err != nil {
-		return 0, err
+func (r *Repository) CreatePermission(companyID int64, name, description string, roleID int64) (*model.Permission, error) {
+	tx := r.db.Begin()
+	if tx.Error != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", tx.Error)
 	}
-	return result.LastInsertId()
+	defer tx.Rollback()
+
+	// Create permission
+	permission := &model.Permission{
+		CompanyID:   companyID,
+		Name:        name,
+		Description: description,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	if err := tx.Create(permission).Error; err != nil {
+		return nil, fmt.Errorf("failed to create permission: %w", err)
+	}
+
+	// Associate permission with role
+	rolePermission := &RolePermission{
+		RoleID:       roleID,
+		PermissionID: permission.ID,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	if err := tx.Create(rolePermission).Error; err != nil {
+		return nil, fmt.Errorf("failed to associate permission with role: %w", err)
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return permission, nil
 }
 
-func (r *Repository) GetPermissionsByRoleID(roleID int64) ([]Permission, error) {
-	rows, err := r.db.Query(
-		"SELECT id, role_id, module_action_id, created_at, updated_at FROM permissions WHERE role_id = ?",
-		roleID,
-	)
-	if err != nil {
+func (r *Repository) GetPermissionsByRoleID(roleID int64) ([]model.Permission, error) {
+	var permissions []model.Permission
+	if err := r.db.
+		Joins("JOIN role_permissions ON permissions.id = role_permissions.permission_id").
+		Where("role_permissions.role_id = ?", roleID).
+		Find(&permissions).Error; err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-
-	var permissions []Permission
-	for rows.Next() {
-		var p Permission
-		if err := rows.Scan(&p.ID, &p.RoleID, &p.ModuleActionID, &p.CreatedAt, &p.UpdatedAt); err != nil {
-			return nil, err
-		}
-		permissions = append(permissions, p)
 	}
 	return permissions, nil
 }
 
-// UserRole operations
-func (r *Repository) AssignRole(companyUserID, roleID int64) (int64, error) {
-	now := time.Now()
-	result, err := r.db.Exec(
-		"INSERT INTO user_roles (company_user_id, role_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
-		companyUserID, roleID, now, now,
-	)
-	if err != nil {
+func (r *Repository) AssignRole(userID, roleID int64) (int64, error) {
+	var count int64
+	if err := r.db.Model(&model.UserRole{}).
+		Where("user_id = ? AND role_id = ?", userID, roleID).
+		Count(&count).Error; err != nil {
 		return 0, err
 	}
-	return result.LastInsertId()
+	if count > 0 {
+		return 0, fmt.Errorf("role already assigned to user")
+	}
+
+	now := time.Now()
+	userRole := &model.UserRole{
+		UserID:    userID,
+		RoleID:    roleID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := r.db.Create(userRole).Error; err != nil {
+		return 0, err
+	}
+	return userRole.ID, nil
 }
 
-func (r *Repository) GetUserRoles(companyUserID int64) ([]UserRole, error) {
-	rows, err := r.db.Query(
-		"SELECT id, company_user_id, role_id, created_at, updated_at FROM user_roles WHERE company_user_id = ?",
-		companyUserID,
-	)
-	if err != nil {
+func (r *Repository) GetUserRoles(companyUserID int64) ([]model.UserRole, error) {
+	var userRoles []model.UserRole
+	if err := r.db.Where("company_user_id = ?", companyUserID).Find(&userRoles).Error; err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-
-	var userRoles []UserRole
-	for rows.Next() {
-		var ur UserRole
-		if err := rows.Scan(&ur.ID, &ur.CompanyUserID, &ur.RoleID, &ur.CreatedAt, &ur.UpdatedAt); err != nil {
-			return nil, err
-		}
-		userRoles = append(userRoles, ur)
 	}
 	return userRoles, nil
 }
@@ -173,139 +173,294 @@ func (r *Repository) GetUserRoles(companyUserID int64) ([]UserRole, error) {
 // Module operations
 func (r *Repository) GetModuleByID(id int64) (*Module, error) {
 	var module Module
-	err := r.db.QueryRow(
-		"SELECT id, name, description, created_at, updated_at FROM modules WHERE id = ?",
-		id,
-	).Scan(&module.ID, &module.Name, &module.Description, &module.CreatedAt, &module.UpdatedAt)
-	if err != nil {
+	if err := r.db.First(&module, id).Error; err != nil {
 		return nil, err
 	}
 	return &module, nil
 }
 
-// ModuleAction operations
 func (r *Repository) GetModuleActionByID(id int64) (*ModuleAction, error) {
-	var action ModuleAction
-	err := r.db.QueryRow(
-		"SELECT id, module_id, name, description, created_at, updated_at FROM module_actions WHERE id = ?",
-		id,
-	).Scan(&action.ID, &action.ModuleID, &action.Name, &action.Description, &action.CreatedAt, &action.UpdatedAt)
-	if err != nil {
+	var moduleAction ModuleAction
+	if err := r.db.First(&moduleAction, id).Error; err != nil {
 		return nil, err
 	}
-	return &action, nil
+	return &moduleAction, nil
 }
 
-// Check if user has permission
-func (r *Repository) HasPermission(userID, companyID int64, moduleName, actionName string) (bool, error) {
-	query := `
-		SELECT COUNT(*) > 0
-		FROM user_roles ur
-		JOIN company_users cu ON ur.company_user_id = cu.id
-		JOIN roles r ON ur.role_id = r.id
-		JOIN permissions p ON r.id = p.role_id
-		JOIN module_actions ma ON p.module_action_id = ma.id
-		JOIN modules m ON ma.module_id = m.id
-		JOIN companies c ON cu.company_id = c.id
-		WHERE cu.user_id = ? 
-		AND (
-			(cu.company_id = ? AND r.name = 'ROOT' AND r.root_group_id = c.root_group_id)
-			OR
-			(cu.company_id = ? AND r.company_id = c.id)
-		)
-		AND m.name = ? AND ma.name = ?
-	`
-	var hasPermission bool
-	err := r.db.QueryRow(query, userID, companyID, companyID, moduleName, actionName).Scan(&hasPermission)
+func (r *Repository) HasPermission(userID, moduleActionID int64) (bool, error) {
+	var count int64
+	err := r.db.Model(&model.Permission{}).
+		Joins("JOIN role_permissions ON permissions.id = role_permissions.permission_id").
+		Joins("JOIN user_roles ON role_permissions.role_id = user_roles.role_id").
+		Joins("JOIN permission_module_actions ON permissions.id = permission_module_actions.permission_id").
+		Where("user_roles.user_id = ? AND permission_module_actions.module_action_id = ?", userID, moduleActionID).
+		Count(&count).Error
 	if err != nil {
 		return false, err
 	}
-	return hasPermission, nil
+	return count > 0, nil
 }
 
-func (r *Repository) DeleteCompanyUsersWithTx(tx *sql.Tx, companyID int64) error {
-	_, err := tx.Exec("DELETE FROM company_users WHERE company_id = ?", companyID)
-	return err
-}
-
-func (r *Repository) DeleteCompanyRolesWithTx(tx *sql.Tx, companyID int64) error {
-	// First delete user roles associated with company roles
-	_, err := tx.Exec(`
-		DELETE ur FROM user_roles ur
-		JOIN roles r ON ur.role_id = r.id
-		WHERE r.company_id = ?`, companyID)
-	if err != nil {
-		return err
-	}
-
-	// Then delete permissions associated with company roles
-	_, err = tx.Exec(`
-		DELETE p FROM permissions p
-		JOIN roles r ON p.role_id = r.id
-		WHERE r.company_id = ?`, companyID)
-	if err != nil {
-		return err
-	}
-
-	// Finally delete the roles
-	_, err = tx.Exec("DELETE FROM roles WHERE company_id = ?", companyID)
-	return err
-}
-
-// GetCompanyUsersByUserID returns all company users for a given user ID
-func (r *Repository) GetCompanyUsersByUserID(userID int64) ([]CompanyUser, error) {
-	rows, err := r.db.Query(
-		"SELECT id, company_id, user_id, is_main, created_at, updated_at FROM company_users WHERE user_id = ?",
-		userID,
-	)
+func (r *Repository) GetUserPermissions(userID int64) ([]model.Permission, error) {
+	var permissions []model.Permission
+	err := r.db.Model(&model.Permission{}).
+		Joins("JOIN role_permissions ON permissions.id = role_permissions.permission_id").
+		Joins("JOIN user_roles ON role_permissions.role_id = user_roles.role_id").
+		Where("user_roles.user_id = ?", userID).
+		Find(&permissions).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	return permissions, nil
+}
 
+func (r *Repository) DeleteCompanyUsersWithTx(tx *gorm.DB, companyID int64) error {
+	return tx.Where("company_id = ?", companyID).Delete(&CompanyUser{}).Error
+}
+
+func (r *Repository) DeleteCompanyRolesWithTx(tx *gorm.DB, companyID int64) error {
+	// First delete user roles
+	if err := tx.
+		Joins("JOIN roles ON user_roles.role_id = roles.id").
+		Where("roles.company_id = ?", companyID).
+		Delete(&model.UserRole{}).Error; err != nil {
+		return err
+	}
+
+	// Then delete role permissions
+	if err := tx.
+		Joins("JOIN roles ON role_permissions.role_id = roles.id").
+		Where("roles.company_id = ?", companyID).
+		Delete(&RolePermission{}).Error; err != nil {
+		return err
+	}
+
+	// Finally delete roles
+	return tx.Where("company_id = ?", companyID).Delete(&model.Role{}).Error
+}
+
+func (r *Repository) GetCompanyUsersByUserID(userID int64) ([]CompanyUser, error) {
 	var companyUsers []CompanyUser
-	for rows.Next() {
-		var cu CompanyUser
-		if err := rows.Scan(&cu.ID, &cu.CompanyID, &cu.UserID, &cu.IsMain, &cu.CreatedAt, &cu.UpdatedAt); err != nil {
-			return nil, err
-		}
-		companyUsers = append(companyUsers, cu)
+	if err := r.db.Where("user_id = ?", userID).Find(&companyUsers).Error; err != nil {
+		return nil, err
 	}
 	return companyUsers, nil
 }
 
 func (r *Repository) CreateRootGroup(name string) (int64, error) {
-	now := time.Now()
-	result, err := r.db.Exec(
-		"INSERT INTO root_groups (name, created_at, updated_at) VALUES (?, ?, ?)",
-		name, now, now,
-	)
-	if err != nil {
+	rootGroup := &RootGroup{
+		Name:      name,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := r.db.Create(rootGroup).Error; err != nil {
 		return 0, err
 	}
-	return result.LastInsertId()
+	return rootGroup.ID, nil
 }
 
 func (r *Repository) GetRootGroupByID(id int64) (*RootGroup, error) {
-	var rg RootGroup
-	err := r.db.QueryRow(
-		"SELECT id, name, created_at, updated_at FROM root_groups WHERE id = ?",
-		id,
-	).Scan(&rg.ID, &rg.Name, &rg.CreatedAt, &rg.UpdatedAt)
-	if err != nil {
+	var rootGroup RootGroup
+	if err := r.db.First(&rootGroup, id).Error; err != nil {
 		return nil, err
 	}
-	return &rg, nil
+	return &rootGroup, nil
 }
 
-// HasCompanyAccess checks if a user has access to a company
-func (r *Repository) HasCompanyAccess(userID int64, companyID string) (bool, error) {
-	var exists bool
-	err := r.db.QueryRow(`
-		SELECT EXISTS (
-			SELECT 1 FROM company_users
-			WHERE user_id = ? AND company_id = ?
-		)
-	`, userID, companyID).Scan(&exists)
-	return exists, err
+func (r *Repository) HasCompanyAccess(userID int64, companyID int64) (bool, error) {
+	var count int64
+	if err := r.db.Model(&CompanyUser{}).
+		Where("user_id = ? AND company_id = ?", userID, companyID).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *Repository) IsRoot(userID int64) (bool, error) {
+	var count int64
+	if err := r.db.Model(&model.UserRole{}).
+		Joins("JOIN roles ON user_roles.role_id = roles.id").
+		Where("user_roles.user_id = ? AND roles.name = ? AND roles.company_id IS NULL", userID, "ROOT").
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *Repository) AssignPermissionToRole(roleID, permissionID string) error {
+	roleIDInt, err := strconv.ParseInt(roleID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid role ID: %w", err)
+	}
+
+	permissionIDInt, err := strconv.ParseInt(permissionID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid permission ID: %w", err)
+	}
+
+	rolePermission := &RolePermission{
+		RoleID:       roleIDInt,
+		PermissionID: permissionIDInt,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	return r.db.Create(rolePermission).Error
+}
+
+func (r *Repository) GetRoleWithPermissions(roleID int64) (*model.Role, error) {
+	var role model.Role
+	if err := r.db.First(&role, roleID).Error; err != nil {
+		return nil, err
+	}
+
+	var permissions []model.Permission
+	if err := r.db.
+		Joins("JOIN role_permissions ON permissions.id = role_permissions.permission_id").
+		Where("role_permissions.role_id = ?", roleID).
+		Find(&permissions).Error; err != nil {
+		return nil, err
+	}
+
+	role.Permissions = permissions
+	return &role, nil
+}
+
+func (r *Repository) ListPermissions(companyID int64) ([]model.Permission, error) {
+	var permissions []model.Permission
+	if err := r.db.Where("company_id = ?", companyID).Find(&permissions).Error; err != nil {
+		return nil, err
+	}
+	return permissions, nil
+}
+
+func (r *Repository) ListRolesWithPermissions(companyID int64) ([]model.Role, error) {
+	var roles []model.Role
+	if err := r.db.Where("company_id = ?", companyID).Find(&roles).Error; err != nil {
+		return nil, err
+	}
+
+	for i := range roles {
+		var permissions []model.Permission
+		if err := r.db.
+			Joins("JOIN role_permissions ON permissions.id = role_permissions.permission_id").
+			Where("role_permissions.role_id = ?", roles[i].ID).
+			Find(&permissions).Error; err != nil {
+			return nil, err
+		}
+		roles[i].Permissions = permissions
+	}
+
+	return roles, nil
+}
+
+func (r *Repository) RemovePermissionFromRole(roleID int64, permissionID int64) error {
+	return r.db.Where("role_id = ? AND permission_id = ?", roleID, permissionID).Delete(&RolePermission{}).Error
+}
+
+func (r *Repository) GetModuleActionID(module, action string) (int64, error) {
+	var moduleAction ModuleAction
+	if err := r.db.Where("module = ? AND action = ?", module, action).First(&moduleAction).Error; err != nil {
+		return 0, err
+	}
+	return moduleAction.ID, nil
+}
+
+func (r *Repository) GetPermissionByID(id int64) (*model.Permission, error) {
+	var permission model.Permission
+	if err := r.db.First(&permission, id).Error; err != nil {
+		return nil, err
+	}
+	return &permission, nil
+}
+
+func (r *Repository) CreatePermissionModuleAction(permissionID, moduleActionID int64) error {
+	return r.db.Create(&PermissionModuleAction{
+		PermissionID:   permissionID,
+		ModuleActionID: moduleActionID,
+	}).Error
+}
+
+// Updates the permissions for a role
+func (r *Repository) UpdateRolePermissions(roleID string, permissionIDs []int64) error {
+	roleIDInt, err := strconv.ParseInt(roleID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid role ID: %w", err)
+	}
+
+	if err := r.db.Where("role_id = ?", roleIDInt).Delete(&RolePermission{}).Error; err != nil {
+		return err
+	}
+
+	for _, permissionID := range permissionIDs {
+		rolePermission := RolePermission{
+			RoleID:       roleIDInt,
+			PermissionID: permissionID,
+		}
+		if err := r.db.Create(&rolePermission).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *Repository) UpdatePermissionModuleActions(permissionID int64, moduleActionIDs []int64) error {
+	tx := r.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer tx.Rollback()
+
+	// Delete existing permission module actions
+	if err := tx.Where("permission_id = ?", permissionID).Delete(&PermissionModuleAction{}).Error; err != nil {
+		return err
+	}
+
+	// Create new permission module actions
+	for _, moduleActionID := range moduleActionIDs {
+		permissionModuleAction := &PermissionModuleAction{
+			PermissionID:   permissionID,
+			ModuleActionID: moduleActionID,
+			CreatedAt:      time.Now(),
+			UpdatedAt:      time.Now(),
+		}
+		if err := tx.Create(permissionModuleAction).Error; err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit().Error
+}
+
+func (r *Repository) GetModuleActions() ([]ModuleAction, error) {
+	var moduleActions []ModuleAction
+	if err := r.db.Model(&ModuleAction{}).
+		Select("module_actions.id, modules.name as module_name, module_actions.name, module_actions.description").
+		Joins("JOIN modules ON module_actions.module_id = modules.id").
+		Find(&moduleActions).Error; err != nil {
+		return nil, err
+	}
+	return moduleActions, nil
+}
+
+func (r *Repository) GetPermissionModuleActions(permissionID int64) ([]ModuleAction, error) {
+	var moduleActions []ModuleAction
+	if err := r.db.Model(&ModuleAction{}).
+		Select("module_actions.id, modules.name as module_name, module_actions.name, module_actions.description").
+		Joins("JOIN modules ON module_actions.module_id = modules.id").
+		Joins("JOIN permission_module_actions ON module_actions.id = permission_module_actions.module_action_id").
+		Where("permission_module_actions.permission_id = ?", permissionID).
+		Find(&moduleActions).Error; err != nil {
+		return nil, err
+	}
+	return moduleActions, nil
+}
+
+func (r *Repository) GetCompanyUser(userID int64, companyID int64) (*CompanyUser, error) {
+	var companyUser CompanyUser
+	if err := r.db.Where("user_id = ? AND company_id = ?", userID, companyID).First(&companyUser).Error; err != nil {
+		return nil, err
+	}
+	return &companyUser, nil
 }

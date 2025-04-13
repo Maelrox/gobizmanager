@@ -10,7 +10,10 @@ import (
 type contextKey string
 
 const (
-	LanguageKey contextKey = "language"
+	LanguageKey     contextKey = "language"
+	companyIDKey    contextKey = "companyID"
+	roleIDKey       contextKey = "roleID"
+	permissionIDKey contextKey = "permissionID"
 )
 
 // GetLanguage returns the language from the context

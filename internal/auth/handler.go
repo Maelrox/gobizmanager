@@ -4,15 +4,17 @@ package auth
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
 
-	"gobizmanager/internal/logger"
-	"gobizmanager/internal/user"
-	"gobizmanager/pkg/context"
+	types "gobizmanager/internal/types"
+	user "gobizmanager/internal/user"
+	"gobizmanager/pkg/encryption"
 	"gobizmanager/pkg/language"
+	"gobizmanager/pkg/logger"
 	"gobizmanager/pkg/utils"
 )
 
@@ -33,21 +35,16 @@ func NewHandler(userRepo *user.Repository, jwtManager *JWTManager, msgStore *lan
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-	lang := context.GetLanguage(r.Context())
 
-	var req user.CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logger.Error("Failed to decode request", zap.Error(err))
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgAuthInvalidRequest))
+	var req types.CreateUserRequest
+	if err := utils.ParseRequest(r, &req); err != nil {
+		utils.RespondError(w, r, h.MsgStore, err)
 		return
 	}
 
-	// Validate the request
 	if err := h.Validator.Struct(req); err != nil {
-		// Log the error first
 		logger.Error("Validation failed", zap.Error(err))
-		// Then handle the validation error
-		utils.ValidationError(w, err, lang, h.MsgStore)
+		utils.ValidationError(w, r, err, h.MsgStore)
 		return
 	}
 
@@ -55,15 +52,15 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	_, err := h.UserRepo.GetUserByEmail(req.Username)
 	if err == nil {
 		logger.Info("Username already exists", zap.String("username", req.Username))
-		utils.JSONError(w, http.StatusConflict, h.MsgStore.GetMessage(lang, language.MsgAuthUsernameExists))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthUsernameExists))
 		return
 	}
 
 	// Register user
-	userID, err := h.UserRepo.RegisterUser(req.Username, req.Password)
+	userID, err := h.UserRepo.RegisterUser(req.Username, req.Password, req.Phone)
 	if err != nil {
 		logger.Error("Failed to register user", zap.Error(err))
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgAuthCreateUserFailed))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthCreateUserFailed))
 		return
 	}
 
@@ -71,7 +68,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	tokens, err := h.JWTManager.GenerateTokenPair(userID)
 	if err != nil {
 		logger.Error("Failed to generate tokens", zap.Error(err))
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgAuthTokenGenFailed))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthTokenGenFailed))
 		return
 	}
 
@@ -80,16 +77,14 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	lang := context.GetLanguage(r.Context())
-
-	var req user.LoginRequest
+	var req types.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgAuthInvalidRequest))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidRequest))
 		return
 	}
 
 	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgAuthValidationFailed))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthValidationFailed))
 		return
 	}
 
@@ -97,23 +92,23 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	u, err := h.UserRepo.GetUserByEmail(req.Username)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthInvalidCredentials))
+			utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidCredentials))
 		} else {
-			utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgAuthDatabaseError))
+			utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthDatabaseError))
 		}
 		return
 	}
 
 	// Check password
-	if !user.CheckPassword(req.Password, u.Password) {
-		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthInvalidCredentials))
+	if !encryption.CheckPassword(req.Password, u.Password) {
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidCredentials))
 		return
 	}
 
 	// Generate tokens
 	tokens, err := h.JWTManager.GenerateTokenPair(u.ID)
 	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgAuthTokenGenFailed))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthTokenGenFailed))
 		return
 	}
 
@@ -121,35 +116,33 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	lang := context.GetLanguage(r.Context())
-
-	var req user.RefreshRequest
+	var req types.RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgAuthInvalidRequest))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidRequest))
 		return
 	}
 
 	if err := h.Validator.Struct(req); err != nil {
-		utils.JSONError(w, http.StatusBadRequest, h.MsgStore.GetMessage(lang, language.MsgAuthValidationFailed))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthValidationFailed))
 		return
 	}
 
 	claims, err := h.JWTManager.VerifyToken(req.RefreshToken)
 	if err != nil {
-		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthInvalidRefreshToken))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidRefreshToken))
 		return
 	}
 
 	_, err = h.UserRepo.GetUserByID(claims.UserID)
 	if err != nil {
-		utils.JSONError(w, http.StatusUnauthorized, h.MsgStore.GetMessage(lang, language.MsgAuthUserNotFound))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthUserNotFound))
 		return
 	}
 
 	// Generate new token pair
 	tokens, err := h.JWTManager.GenerateTokenPair(claims.UserID)
 	if err != nil {
-		utils.JSONError(w, http.StatusInternalServerError, h.MsgStore.GetMessage(lang, language.MsgAuthTokenGenFailed))
+		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthTokenGenFailed))
 		return
 	}
 
