@@ -9,8 +9,6 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"gobizmanager/internal/app/rbac"
-	"gobizmanager/internal/app/role"
-	"gobizmanager/internal/app/role/permission"
 	"gobizmanager/internal/app/user"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"
@@ -20,12 +18,10 @@ import (
 
 type Handler struct {
 	shared.BaseHandler
-	repo           *Repository
-	rbacRepo       *rbac.Repository
-	userRepo       *user.Repository
-	roleRepo       *role.Repository
-	permissionRepo *permission.Repository
-	Validator      *validator.Validate
+	repo      *Repository
+	rbacRepo  *rbac.Repository
+	userRepo  *user.Repository
+	Validator *validator.Validate
 }
 
 func (h *Handler) CreateCompany(w http.ResponseWriter, r *http.Request) {

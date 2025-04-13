@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"gobizmanager/internal/app/role"
+	"gobizmanager/internal/app/pkg/model"
+	"gobizmanager/internal/app/rbac"
 	"gobizmanager/internal/app/user"
-	"gobizmanager/internal/app/user_role"
 	"gobizmanager/pkg/encryption"
+
 	"gobizmanager/platform/config"
 
 	"gorm.io/gorm"
@@ -50,7 +51,7 @@ func (r *Repository) RegisterCompanyUser(req *RegisterCompanyUserRequest) (*Comp
 	}
 
 	// Hash password
-	hashedPassword, err := user.HashPassword(req.Password)
+	hashedPassword, err := encryption.HashPassword(req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
@@ -71,13 +72,13 @@ func (r *Repository) RegisterCompanyUser(req *RegisterCompanyUserRequest) (*Comp
 	}
 
 	// Get USER role ID
-	var userRole role.Role
+	var userRole rbac.Role
 	if err := tx.Where("name = ? AND company_id IS NULL", "USER").First(&userRole).Error; err != nil {
 		return nil, fmt.Errorf("failed to get USER role ID: %w", err)
 	}
 
 	// Assign USER role to the new user
-	userRoleAssignment := &user_role.UserRole{
+	userRoleAssignment := &rbac.UserRole{
 		UserID:    userID,
 		RoleID:    userRole.ID,
 		CreatedAt: time.Now(),
@@ -96,7 +97,7 @@ func (r *Repository) RegisterCompanyUser(req *RegisterCompanyUserRequest) (*Comp
 
 func (r *Repository) createUser(tx *gorm.DB, username, emailHash, password, phone string) (int64, error) {
 	now := time.Now()
-	user := &user.User{
+	user := &model.User{
 		Email:     username,
 		EmailHash: emailHash,
 		Password:  password,

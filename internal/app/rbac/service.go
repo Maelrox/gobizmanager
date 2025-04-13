@@ -2,19 +2,17 @@ package rbac
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
-	"gobizmanager/pkg/errors"
 	"gobizmanager/pkg/language"
 )
 
-// Service handles RBAC business logic
 type Service struct {
 	repo *Repository
 	val  *Validator
 }
 
-// NewService creates a new RBAC service
 func NewService(repo *Repository, val *Validator) *Service {
 	return &Service{
 		repo: repo,
@@ -23,110 +21,114 @@ func NewService(repo *Repository, val *Validator) *Service {
 }
 
 func (s *Service) CreatePermission(ctx context.Context, companyID int64, name, description string, roleID int64) (*Permission, error) {
-	// Validate company access
-	result := s.val.ValidateCompanyRequest(ctx, strconv.FormatInt(companyID, 10))
-	if result.CompanyID != companyID {
-		return nil, s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodePermissionDenied, language.MsgPermissionDenied)
-	}
-
-	// Check if role exists and belongs to the company
-	role, err := s.repo.GetRoleByID(roleID)
-	if err != nil {
-		return nil, s.newError(ctx, errors.ErrorTypeNotFound, errors.ErrorCodeRoleNotFound, language.MsgRoleNotFound)
-	}
-	if role.CompanyID != companyID {
-		return nil, s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodeRoleCompanyMismatch, MsgRoleCompanyMismatch)
-	}
-	return s.repo.CreatePermission(companyID, name, description, roleID)
-}
-
-// AssignRole assigns a role to a user
-func (s *Service) AssignRole(ctx context.Context, userID int64, roleID int64) error {
-	result := s.val.ValidateRoleAssignment(ctx, &AssignRoleRequest{
-		UserID: userID,
-		RoleID: roleID,
-	})
-
-	// Assign role
-	_, err := s.repo.AssignRole(result.CompanyUser.ID, roleID)
-	return err
-}
-
-// UpdateRolePermissions updates permissions for a role
-func (s *Service) UpdateRolePermissions(ctx context.Context, roleID int64, permissionIDs []int64) error {
-	// Validate role request
-	result := s.val.ValidateRoleRequest(ctx, strconv.FormatInt(roleID, 10))
-	if result.Role.ID != strconv.FormatInt(roleID, 10) {
-		return s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodePermissionDenied, language.MsgPermissionDenied)
-	}
-
-	// Update permissions
-	return s.repo.UpdateRolePermissions(strconv.FormatInt(roleID, 10), permissionIDs)
-}
-
-// CreatePermissionModuleAction associates a module action with a permission
-func (s *Service) CreatePermissionModuleAction(ctx context.Context, permissionID int64, moduleActionID int64) error {
-	// Validate permission request
-	result := s.val.ValidatePermissionRequest(ctx, strconv.FormatInt(permissionID, 10))
-	if result.PermissionID != permissionID {
-		return s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodePermissionDenied, language.MsgPermissionDenied)
-	}
-
-	// Create association
-	return s.repo.CreatePermissionModuleAction(permissionID, moduleActionID)
-}
-
-// UpdatePermissionModuleActions updates module actions for a permission
-func (s *Service) UpdatePermissionModuleActions(ctx context.Context, permissionID int64, moduleActionIDs []int64) error {
-	// Validate permission request
-	result := s.val.ValidatePermissionRequest(ctx, strconv.FormatInt(permissionID, 10))
-	if result.PermissionID != permissionID {
-		return s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodePermissionDenied, language.MsgPermissionDenied)
-	}
-
-	// Update actions
-	return s.repo.UpdatePermissionModuleActions(strconv.FormatInt(permissionID, 10), moduleActionIDs)
-}
-
-// ListRoles returns all roles for a company
-func (s *Service) ListRoles(ctx context.Context, companyID int64) ([]Role, error) {
-	// Validate company request
-	result := s.val.ValidateCompanyRequest(ctx, strconv.FormatInt(companyID, 10))
-	if result.CompanyID != companyID {
-		return nil, s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodePermissionDenied, language.MsgPermissionDenied)
-	}
-
-	// List roles
-	return s.repo.ListRolesWithPermissions(companyID)
-}
-
-// ListPermissions returns all permissions for a company
-func (s *Service) ListPermissions(ctx context.Context, companyID int64) ([]Permission, error) {
-	// Validate company request
-	result := s.val.ValidateCompanyRequest(ctx, strconv.FormatInt(companyID, 10))
-	if result.CompanyID != companyID {
-		return nil, s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodePermissionDenied, language.MsgPermissionDenied)
-	}
-
-	// List permissions
-	return s.repo.ListPermissions(companyID)
-}
-
-// GetPermissionModuleActions returns all available actions for a permission module
-func (s *Service) GetPermissionModuleActions(ctx context.Context, permissionID int64) ([]ModuleAction, error) {
-	// Validate permission request
-	result := s.val.ValidatePermissionRequest(ctx, strconv.FormatInt(permissionID, 10))
-	if result.PermissionID != permissionID {
-		return nil, s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodePermissionDenied, language.MsgPermissionDenied)
-	}
-
-	// Get actions
-	actions, err := s.repo.GetPermissionModuleActions(permissionID)
+	err := s.val.ValidateCompanyRequest(ctx, companyID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert to ModuleAction slice
+	role, err := s.repo.GetRoleByID(roleID)
+	if err != nil {
+		return nil, errors.New(language.RoleNotFound)
+	}
+	if role.CompanyID != companyID {
+		return nil, errors.New(language.RoleNotFound)
+	}
+	return s.repo.CreatePermission(companyID, name, description, roleID)
+}
+
+func (s *Service) AssignRole(ctx context.Context, userID int64, roleID int64) error {
+	companyUser, err := s.val.ValidateRoleAssignment(ctx, &AssignRoleRequest{
+		UserID: userID,
+		RoleID: roleID,
+	})
+	if err != nil {
+		return errors.New(language.PermissionDenied)
+	}
+
+	_, err = s.repo.AssignRole(companyUser.ID, roleID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Service) UpdateRolePermissions(ctx context.Context, roleID int64, permissionIDs []int64) error {
+	err := s.val.ValidateRoleRequest(ctx, strconv.FormatInt(roleID, 10))
+	if err != nil {
+		return err
+	}
+
+	err = s.repo.UpdateRolePermissions(strconv.FormatInt(roleID, 10), permissionIDs)
+	if err != nil {
+		return errors.New(language.PermissionCreateFailed)
+	}
+
+	return nil
+}
+
+func (s *Service) CreatePermissionModuleAction(ctx context.Context, permissionID int64, moduleActionID int64) error {
+	err := s.val.ValidatePermissionRequest(ctx, permissionID)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.CreatePermissionModuleAction(permissionID, moduleActionID)
+}
+
+func (s *Service) UpdatePermissionModuleActions(ctx context.Context, permissionID int64, moduleActionIDs []int64) error {
+	err := s.val.ValidatePermissionRequest(ctx, permissionID)
+	if err != nil {
+		return err
+	}
+
+	err = s.repo.UpdatePermissionModuleActions(permissionID, moduleActionIDs)
+	if err != nil {
+		return errors.New(language.PermissionCreateFailed)
+	}
+
+	return nil
+}
+
+func (s *Service) ListRoles(ctx context.Context, companyID int64) ([]Role, error) {
+	err := s.val.ValidateCompanyRequest(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	roles, err := s.repo.ListRolesWithPermissions(companyID)
+	if err != nil {
+		return nil, errors.New(language.RoleListFailed)
+	}
+
+	return roles, nil
+}
+
+func (s *Service) ListPermissions(ctx context.Context, companyID int64) ([]Permission, error) {
+	err := s.val.ValidateCompanyRequest(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	permissions, err := s.repo.ListPermissions(companyID)
+	if err != nil {
+		return nil, errors.New(language.PermissionListFailed)
+	}
+
+	return permissions, nil
+}
+
+func (s *Service) GetPermissionModuleActions(ctx context.Context, permissionID int64) ([]ModuleAction, error) {
+	err := s.val.ValidatePermissionRequest(ctx, permissionID)
+	if err != nil {
+		return nil, err
+	}
+
+	actions, err := s.repo.GetPermissionModuleActions(permissionID)
+	if err != nil {
+		return nil, errors.New(language.PermissionListFailed)
+	}
+
 	moduleActions := make([]ModuleAction, len(actions))
 	for i, action := range actions {
 		moduleActions[i] = ModuleAction{
@@ -139,70 +141,66 @@ func (s *Service) GetPermissionModuleActions(ctx context.Context, permissionID i
 	return moduleActions, nil
 }
 
-// CheckPermission checks if a user has a specific permission
 func (s *Service) CheckPermission(ctx context.Context, userID int64, moduleName, actionName string) (bool, error) {
-	// Get module action ID
 	moduleActionID, err := s.repo.GetModuleActionID(moduleName, actionName)
 	if err != nil {
-		return false, s.newError(ctx, errors.ErrorTypeInternal, errors.ErrorCodePermissionCheckFailed, language.MsgPermissionCheckFailed)
+		return false, errors.New(language.PermissionCheckFailed)
+	}
+	hasPermission, err := s.repo.HasPermission(userID, moduleActionID)
+	if err != nil {
+		return false, errors.New(language.PermissionCheckFailed)
 	}
 
-	// Check permission
-	return s.repo.HasPermission(userID, moduleActionID)
+	return hasPermission, nil
 }
 
-// CreateRole creates a new role
 func (s *Service) CreateRole(ctx context.Context, companyID int64, name, description string) (*Role, error) {
-	// Validate company access
-	result := s.val.ValidateCompanyRequest(ctx, strconv.FormatInt(companyID, 10))
-	if result.CompanyID != companyID {
-		return nil, s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodePermissionDenied, language.MsgPermissionDenied)
+	err := s.val.ValidateCompanyRequest(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	role, err := s.repo.CreateRole(companyID, name, description)
+	if err != nil {
+		return nil, errors.New(language.RoleCreateFailed)
 	}
 
-	// Create role
-	return s.repo.CreateRole(companyID, name, description)
+	return role, nil
 }
 
-// RemovePermission removes a permission from a role
 func (s *Service) RemovePermission(ctx context.Context, roleID, permissionID int64) error {
-	// Validate role request
-	result := s.val.ValidateRoleRequest(ctx, strconv.FormatInt(roleID, 10))
-	if result.Role.ID != strconv.FormatInt(roleID, 10) {
-		return s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodePermissionDenied, language.MsgPermissionDenied)
+	err := s.val.ValidateRoleRequest(ctx, strconv.FormatInt(roleID, 10))
+	if err != nil {
+		return err
+	}
+	err = s.repo.RemovePermissionFromRole(roleID, permissionID)
+	if err != nil {
+		return errors.New(language.PermissionRemoveFailed)
 	}
 
-	// Remove permission
-	return s.repo.RemovePermissionFromRole(strconv.FormatInt(roleID, 10), strconv.FormatInt(permissionID, 10))
+	return nil
 }
 
-// GetRole returns a role by ID
 func (s *Service) GetRole(ctx context.Context, roleID int64) (*Role, error) {
-	// Validate role request
-	result := s.val.ValidateRoleRequest(ctx, strconv.FormatInt(roleID, 10))
-	if result.Role.ID != strconv.FormatInt(roleID, 10) {
-		return nil, s.newError(ctx, errors.ErrorTypeAuthorization, errors.ErrorCodePermissionDenied, language.MsgPermissionDenied)
+	err := s.val.ValidateRoleRequest(ctx, strconv.FormatInt(roleID, 10))
+	if err != nil {
+		return nil, err
+	}
+	role, err := s.repo.GetRoleWithPermissions(roleID)
+	if err != nil {
+		return nil, errors.New(language.RoleListFailed)
 	}
 
-	// Get role
-	return s.repo.GetRoleWithPermissions(strconv.FormatInt(roleID, 10))
+	return role, nil
 }
 
-// CheckRootAccess checks if a user has root access
 func (s *Service) CheckRootAccess(ctx context.Context, userID int64) (bool, error) {
 	return s.repo.IsRoot(userID)
 }
 
-// CheckCompanyAccess checks if a user has access to a company
-func (s *Service) CheckCompanyAccess(ctx context.Context, userID int64, companyID string) (bool, error) {
+func (s *Service) CheckCompanyAccess(ctx context.Context, userID int64, companyID int64) (bool, error) {
 	return s.repo.HasCompanyAccess(userID, companyID)
 }
 
-// GetModuleActions returns all module actions
-func (s *Service) GetModuleActions(ctx context.Context) ([]struct {
-	ID          int64  `json:"id"`
-	ModuleName  string `json:"module_name"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}, error) {
+func (s *Service) GetModuleActions(ctx context.Context) ([]ModuleAction, error) {
 	return s.repo.GetModuleActions()
 }

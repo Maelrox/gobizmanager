@@ -13,7 +13,6 @@ func NewHandler(repo *Repository) *Handler {
 	return &Handler{repo: repo}
 }
 
-// SearchUsers handles listing users within a company
 func (h *Handler) SearchUsers(w http.ResponseWriter, r *http.Request) {
 	companyID := r.URL.Query().Get("companyId")
 	if companyID == "" {

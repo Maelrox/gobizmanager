@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"gobizmanager/internal/app/role"
-	"gobizmanager/internal/app/user_role"
+	"gobizmanager/internal/app/pkg/model"
+	"gobizmanager/pkg/encryption"
 	"gobizmanager/platform/config"
 
 	"gorm.io/gorm"
@@ -24,13 +24,13 @@ func NewRepository(db *gorm.DB, cfg *config.Config) *Repository {
 
 // CreateUserWithTx creates a new user within a transaction
 func (r *Repository) CreateUserWithTx(tx *gorm.DB, username, password, phone string) (int64, error) {
-	hashedPassword, err := HashPassword(password)
+	hashedPassword, err := encryption.HashPassword(password)
 	if err != nil {
 		return 0, err
 	}
 
 	// Create a temporary user to encrypt fields
-	user := &User{
+	user := &model.User{
 		Email:    username,
 		Password: hashedPassword,
 		Phone:    phone,
@@ -56,8 +56,8 @@ func (r *Repository) CreateUserWithTx(tx *gorm.DB, username, password, phone str
 }
 
 // GetUserByID returns a user by ID
-func (r *Repository) GetUserByID(id int64) (*User, error) {
-	user := &User{}
+func (r *Repository) GetUserByID(id int64) (*model.User, error) {
+	user := &model.User{}
 	if err := r.db.First(user, id).Error; err != nil {
 		return nil, err
 	}
@@ -70,12 +70,10 @@ func (r *Repository) GetUserByID(id int64) (*User, error) {
 	return user, nil
 }
 
-// GetUserByEmail returns a user by email
-func (r *Repository) GetUserByEmail(email string) (*User, error) {
-	// Create email hash for searching
+func (r *Repository) GetUserByEmail(email string) (*model.User, error) {
 	emailHash := fmt.Sprintf("%x", sha256.Sum256([]byte(email)))
 
-	user := &User{}
+	user := &model.User{}
 	if err := r.db.Where("email_hash = ?", emailHash).First(user).Error; err != nil {
 		return nil, err
 	}
@@ -95,13 +93,13 @@ func (r *Repository) GetDB() *gorm.DB {
 
 // CreateUser creates a new user
 func (r *Repository) CreateUser(email, password, phone string) (int64, error) {
-	hashedPassword, err := HashPassword(password)
+	hashedPassword, err := encryption.HashPassword(password)
 	if err != nil {
 		return 0, err
 	}
 
 	// Create a temporary user to encrypt fields
-	user := &User{
+	user := &model.User{
 		Email:    email,
 		Password: hashedPassword,
 		Phone:    phone,
@@ -128,7 +126,7 @@ func (r *Repository) CreateUser(email, password, phone string) (int64, error) {
 
 // UpdateUser updates a user
 func (r *Repository) UpdateUser(id int64, email, password, phone string) error {
-	user := &User{}
+	user := &model.User{}
 	if err := r.db.First(user, id).Error; err != nil {
 		return err
 	}
@@ -139,7 +137,7 @@ func (r *Repository) UpdateUser(id int64, email, password, phone string) error {
 		user.EmailHash = fmt.Sprintf("%x", sha256.Sum256([]byte(email)))
 	}
 	if password != "" {
-		hashedPassword, err := HashPassword(password)
+		hashedPassword, err := encryption.HashPassword(password)
 		if err != nil {
 			return err
 		}
@@ -161,7 +159,7 @@ func (r *Repository) UpdateUser(id int64, email, password, phone string) error {
 // GetRootRoleID returns the root role ID
 func (r *Repository) GetRootRoleID(tx *gorm.DB) (int64, error) {
 	var roleID int64
-	if err := tx.Model(&role.Role{}).Where("name = ?", "ROOT").Select("id").First(&roleID).Error; err != nil {
+	if err := tx.Model(&model.Role{}).Where("name = ?", "ROOT").Select("id").First(&roleID).Error; err != nil {
 		return 0, err
 	}
 	return roleID, nil
@@ -169,7 +167,7 @@ func (r *Repository) GetRootRoleID(tx *gorm.DB) (int64, error) {
 
 // AssignRootRole assigns the root role to a user
 func (r *Repository) AssignRootRole(tx *gorm.DB, userID, roleID int64) error {
-	userRole := &user_role.UserRole{
+	userRole := &model.UserRole{
 		UserID:    userID,
 		RoleID:    roleID,
 		CreatedAt: time.Now(),
@@ -233,10 +231,9 @@ func (r *Repository) RegisterUser(username, password, phone string) (int64, erro
 	return userID, nil
 }
 
-// IsRoot checks if a user is root
 func (r *Repository) IsRoot(userID int64) (bool, error) {
 	var count int64
-	if err := r.db.Model(&user_role.UserRole{}).
+	if err := r.db.Model(&model.UserRole{}).
 		Joins("JOIN roles ON user_roles.role_id = roles.id").
 		Where("user_roles.user_id = ? AND roles.name = ?", userID, "ROOT").
 		Count(&count).Error; err != nil {
@@ -254,7 +251,7 @@ func (r *Repository) SearchUsers(companyID string) ([]struct {
 		ID    uint   `json:"id"`
 		Email string `json:"email"`
 	}
-	if err := r.db.Model(&User{}).
+	if err := r.db.Model(&model.User{}).
 		Select("users.id, users.email").
 		Joins("JOIN company_users ON users.id = company_users.user_id").
 		Where("company_users.company_id = ?", companyID).

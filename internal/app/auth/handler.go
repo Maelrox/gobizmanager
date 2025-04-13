@@ -10,6 +10,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
 
+	"gobizmanager/internal/app/pkg/model"
 	"gobizmanager/internal/app/user"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"
@@ -17,7 +18,7 @@ import (
 )
 
 type Handler struct {
-	UserRepo   *user.Repository
+	UserRepo   *model.Repository
 	JWTManager *JWTManager
 	Validator  *validator.Validate
 	MsgStore   *language.MessageStore
@@ -25,7 +26,7 @@ type Handler struct {
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
-	var req user.CreateUserRequest
+	var req model.CreateUserRequest
 	if err := utils.ParseRequest(r, &req); err != nil {
 		utils.RespondError(w, r, h.MsgStore, err)
 		return
@@ -66,7 +67,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	var req user.LoginRequest
+	var req model.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidRequest))
 		return

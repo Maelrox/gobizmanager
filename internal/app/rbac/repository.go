@@ -5,42 +5,8 @@ import (
 	"strconv"
 	"time"
 
-	"gobizmanager/internal/app/role/permission"
-	"gobizmanager/internal/app/user_role"
-
 	"gorm.io/gorm"
 )
-
-// Module names
-const (
-	ModuleCompany = "company"
-	ModuleUser    = "user"
-	ModuleRole    = "role"
-)
-
-// Action names
-const (
-	ActionCreate = "create"
-	ActionRead   = "read"
-	ActionUpdate = "update"
-	ActionDelete = "delete"
-)
-
-// RolePermission represents the relationship between roles and permissions
-type RolePermission struct {
-	RoleID       int64 `gorm:"primaryKey"`
-	PermissionID int64 `gorm:"primaryKey"`
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-}
-
-// PermissionModuleAction represents the relationship between permissions and module actions
-type PermissionModuleAction struct {
-	PermissionID   int64     `json:"permission_id" gorm:"primaryKey"`
-	ModuleActionID int64     `json:"module_action_id" gorm:"primaryKey"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-}
 
 type Repository struct {
 	db *gorm.DB
@@ -170,11 +136,9 @@ func (r *Repository) GetPermissionsByRoleID(roleID int64) ([]Permission, error) 
 	return permissions, nil
 }
 
-// UserRole operations
 func (r *Repository) AssignRole(userID, roleID int64) (int64, error) {
-	// Check for existing role assignment
 	var count int64
-	if err := r.db.Model(&user_role.UserRole{}).
+	if err := r.db.Model(&UserRole{}).
 		Where("user_id = ? AND role_id = ?", userID, roleID).
 		Count(&count).Error; err != nil {
 		return 0, err
@@ -184,7 +148,7 @@ func (r *Repository) AssignRole(userID, roleID int64) (int64, error) {
 	}
 
 	now := time.Now()
-	userRole := &user_role.UserRole{
+	userRole := &UserRole{
 		UserID:    userID,
 		RoleID:    roleID,
 		CreatedAt: now,
@@ -235,9 +199,9 @@ func (r *Repository) HasPermission(userID, moduleActionID int64) (bool, error) {
 	return count > 0, nil
 }
 
-func (r *Repository) GetUserPermissions(userID int64) ([]permission.Permission, error) {
-	var permissions []permission.Permission
-	err := r.db.Model(&permission.Permission{}).
+func (r *Repository) GetUserPermissions(userID int64) ([]Permission, error) {
+	var permissions []Permission
+	err := r.db.Model(&Permission{}).
 		Joins("JOIN role_permissions ON permissions.id = role_permissions.permission_id").
 		Joins("JOIN user_roles ON role_permissions.role_id = user_roles.role_id").
 		Where("user_roles.user_id = ?", userID).
@@ -257,7 +221,7 @@ func (r *Repository) DeleteCompanyRolesWithTx(tx *gorm.DB, companyID int64) erro
 	if err := tx.
 		Joins("JOIN roles ON user_roles.role_id = roles.id").
 		Where("roles.company_id = ?", companyID).
-		Delete(&user_role.UserRole{}).Error; err != nil {
+		Delete(&UserRole{}).Error; err != nil {
 		return err
 	}
 
@@ -265,7 +229,7 @@ func (r *Repository) DeleteCompanyRolesWithTx(tx *gorm.DB, companyID int64) erro
 	if err := tx.
 		Joins("JOIN roles ON role_permissions.role_id = roles.id").
 		Where("roles.company_id = ?", companyID).
-		Delete(&permission.RolePermission{}).Error; err != nil {
+		Delete(&RolePermission{}).Error; err != nil {
 		return err
 	}
 
@@ -301,7 +265,7 @@ func (r *Repository) GetRootGroupByID(id int64) (*RootGroup, error) {
 	return &rootGroup, nil
 }
 
-func (r *Repository) HasCompanyAccess(userID int64, companyID string) (bool, error) {
+func (r *Repository) HasCompanyAccess(userID int64, companyID int64) (bool, error) {
 	var count int64
 	if err := r.db.Model(&CompanyUser{}).
 		Where("user_id = ? AND company_id = ?", userID, companyID).
@@ -313,7 +277,7 @@ func (r *Repository) HasCompanyAccess(userID int64, companyID string) (bool, err
 
 func (r *Repository) IsRoot(userID int64) (bool, error) {
 	var count int64
-	if err := r.db.Model(&user_role.UserRole{}).
+	if err := r.db.Model(&UserRole{}).
 		Joins("JOIN roles ON user_roles.role_id = roles.id").
 		Where("user_roles.user_id = ? AND roles.name = ? AND roles.company_id IS NULL", userID, "ROOT").
 		Count(&count).Error; err != nil {
@@ -342,7 +306,7 @@ func (r *Repository) AssignPermissionToRole(roleID, permissionID string) error {
 	return r.db.Create(rolePermission).Error
 }
 
-func (r *Repository) GetRoleWithPermissions(roleID string) (*Role, error) {
+func (r *Repository) GetRoleWithPermissions(roleID int64) (*Role, error) {
 	var role Role
 	if err := r.db.First(&role, roleID).Error; err != nil {
 		return nil, err
@@ -388,21 +352,10 @@ func (r *Repository) ListRolesWithPermissions(companyID int64) ([]Role, error) {
 	return roles, nil
 }
 
-// RemovePermissionFromRole removes a permission from a role
-func (r *Repository) RemovePermissionFromRole(roleID, permissionID string) error {
-	roleIDInt, err := strconv.ParseInt(roleID, 10, 64)
-	if err != nil {
-		return err
-	}
-	permissionIDInt, err := strconv.ParseInt(permissionID, 10, 64)
-	if err != nil {
-		return err
-	}
-
-	return r.db.Where("role_id = ? AND permission_id = ?", roleIDInt, permissionIDInt).Delete(&RolePermission{}).Error
+func (r *Repository) RemovePermissionFromRole(roleID int64, permissionID int64) error {
+	return r.db.Where("role_id = ? AND permission_id = ?", roleID, permissionID).Delete(&RolePermission{}).Error
 }
 
-// GetModuleActionID returns the ID of a module action
 func (r *Repository) GetModuleActionID(module, action string) (int64, error) {
 	var moduleAction ModuleAction
 	if err := r.db.Where("module = ? AND action = ?", module, action).First(&moduleAction).Error; err != nil {
@@ -428,28 +381,21 @@ func (r *Repository) CreatePermissionModuleAction(permissionID, moduleActionID i
 	}).Error
 }
 
-// UpdateRolePermissions updates the permissions for a role
-func (r *Repository) UpdateRolePermissions(roleID string, permissionIDs []string) error {
-	// Convert string roleID to int64
+// Updates the permissions for a role
+func (r *Repository) UpdateRolePermissions(roleID string, permissionIDs []int64) error {
 	roleIDInt, err := strconv.ParseInt(roleID, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid role ID: %w", err)
 	}
 
-	// Delete existing permissions
 	if err := r.db.Where("role_id = ?", roleIDInt).Delete(&RolePermission{}).Error; err != nil {
 		return err
 	}
 
-	// Add new permissions
 	for _, permissionID := range permissionIDs {
-		permissionIDInt, err := strconv.ParseInt(permissionID, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid permission ID: %w", err)
-		}
 		rolePermission := RolePermission{
 			RoleID:       roleIDInt,
-			PermissionID: permissionIDInt,
+			PermissionID: permissionID,
 		}
 		if err := r.db.Create(&rolePermission).Error; err != nil {
 			return err
@@ -459,28 +405,22 @@ func (r *Repository) UpdateRolePermissions(roleID string, permissionIDs []string
 	return nil
 }
 
-func (r *Repository) UpdatePermissionModuleActions(permissionID string, moduleActionIDs []int64) error {
+func (r *Repository) UpdatePermissionModuleActions(permissionID int64, moduleActionIDs []int64) error {
 	tx := r.db.Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
 	defer tx.Rollback()
 
-	// Convert string permissionID to int64
-	permissionIDInt, err := strconv.ParseInt(permissionID, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid permission ID: %w", err)
-	}
-
 	// Delete existing permission module actions
-	if err := tx.Where("permission_id = ?", permissionIDInt).Delete(&permission.PermissionModuleAction{}).Error; err != nil {
+	if err := tx.Where("permission_id = ?", permissionID).Delete(&PermissionModuleAction{}).Error; err != nil {
 		return err
 	}
 
 	// Create new permission module actions
 	for _, moduleActionID := range moduleActionIDs {
-		permissionModuleAction := &permission.PermissionModuleAction{
-			PermissionID:   permissionIDInt,
+		permissionModuleAction := &PermissionModuleAction{
+			PermissionID:   permissionID,
 			ModuleActionID: moduleActionID,
 			CreatedAt:      time.Now(),
 			UpdatedAt:      time.Now(),
@@ -493,18 +433,8 @@ func (r *Repository) UpdatePermissionModuleActions(permissionID string, moduleAc
 	return tx.Commit().Error
 }
 
-func (r *Repository) GetModuleActions() ([]struct {
-	ID          int64  `json:"id"`
-	ModuleName  string `json:"module_name"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}, error) {
-	var moduleActions []struct {
-		ID          int64  `json:"id"`
-		ModuleName  string `json:"module_name"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}
+func (r *Repository) GetModuleActions() ([]ModuleAction, error) {
+	var moduleActions []ModuleAction
 	if err := r.db.Model(&ModuleAction{}).
 		Select("module_actions.id, modules.name as module_name, module_actions.name, module_actions.description").
 		Joins("JOIN modules ON module_actions.module_id = modules.id").
@@ -514,18 +444,8 @@ func (r *Repository) GetModuleActions() ([]struct {
 	return moduleActions, nil
 }
 
-func (r *Repository) GetPermissionModuleActions(permissionID int64) ([]struct {
-	ID          int64  `json:"id"`
-	ModuleName  string `json:"module_name"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}, error) {
-	var moduleActions []struct {
-		ID          int64  `json:"id"`
-		ModuleName  string `json:"module_name"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}
+func (r *Repository) GetPermissionModuleActions(permissionID int64) ([]ModuleAction, error) {
+	var moduleActions []ModuleAction
 	if err := r.db.Model(&ModuleAction{}).
 		Select("module_actions.id, modules.name as module_name, module_actions.name, module_actions.description").
 		Joins("JOIN modules ON module_actions.module_id = modules.id").
@@ -537,7 +457,7 @@ func (r *Repository) GetPermissionModuleActions(permissionID int64) ([]struct {
 	return moduleActions, nil
 }
 
-func (r *Repository) GetCompanyUser(userID int64, companyID string) (*CompanyUser, error) {
+func (r *Repository) GetCompanyUser(userID int64, companyID int64) (*CompanyUser, error) {
 	var companyUser CompanyUser
 	if err := r.db.Where("user_id = ? AND company_id = ?", userID, companyID).First(&companyUser).Error; err != nil {
 		return nil, err

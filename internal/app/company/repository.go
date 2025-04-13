@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"gobizmanager/internal/app/rbac"
 	"gobizmanager/pkg/language"
@@ -98,18 +97,10 @@ func (r *Repository) CreateCompany(req *CreateCompanyRequest, userID int64) (*Co
 			return nil, fmt.Errorf("failed to assign permission to ADMIN role: %w", err)
 		}
 	}
-
-	// Convert role ID from string to int64
-	roleID, err := strconv.ParseInt(adminRole.ID, 10, 64)
-	if err != nil {
-		tx.Rollback()
-		return nil, fmt.Errorf("failed to parse role ID: %w", err)
-	}
-
 	// Assign ADMIN role to user
 	userRole := &rbac.UserRole{
 		CompanyUserID: companyUser.ID,
-		RoleID:        roleID,
+		RoleID:        adminRole.ID,
 	}
 	if err := tx.Create(userRole).Error; err != nil {
 		tx.Rollback()
@@ -201,7 +192,6 @@ func (r *Repository) ListCompanies(userID int64) ([]*Company, error) {
 	return companies, nil
 }
 
-// ListCompaniesForUser returns all companies a user has access to
 func (r *Repository) ListCompaniesForUser(userID int64) ([]Company, error) {
 	var companies []Company
 	err := r.db.Joins("JOIN company_users ON companies.id = company_users.company_id").
@@ -221,7 +211,6 @@ func (r *Repository) ListCompaniesForUser(userID int64) ([]Company, error) {
 	return companies, nil
 }
 
-// CompanyExistsForUser checks if a company with the given name already exists for the user
 func (r *Repository) CompanyExistsForUser(userID int64, name string) (bool, error) {
 	var count int64
 	err := r.db.Model(&Company{}).
@@ -234,7 +223,6 @@ func (r *Repository) CompanyExistsForUser(userID int64, name string) (bool, erro
 	return count > 0, nil
 }
 
-// CompanyExistsForUser checks if a company with the given name already exists for the user
 func (r *Repository) CompanyExistsForUserByID(userID int64, companyID int64) (bool, error) {
 	var count int64
 	err := r.db.Model(&Company{}).
@@ -247,7 +235,6 @@ func (r *Repository) CompanyExistsForUserByID(userID int64, companyID int64) (bo
 	return count > 0, nil
 }
 
-// AddUserToCompany adds a user to a company
 func (r *Repository) AddUserToCompany(tx *gorm.DB, companyID, userID int64) error {
 	companyUser := &rbac.CompanyUser{
 		CompanyID: companyID,

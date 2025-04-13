@@ -40,7 +40,7 @@ type Permission struct {
 
 // Role represents a system role
 type Role struct {
-	ID          string       `json:"id"`
+	ID          int64        `json:"id"`
 	CompanyID   int64        `json:"company_id"`
 	Name        string       `json:"name"`
 	Description string       `json:"description"`
@@ -51,6 +51,7 @@ type Role struct {
 
 type UserRole struct {
 	ID            int64     `json:"id"`
+	UserID        int64     `json:"user_id"`
 	CompanyUserID int64     `json:"company_user_id"`
 	RoleID        int64     `json:"role_id"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -121,4 +122,42 @@ type CreatePermissionModuleActionRequest struct {
 type UpdateRolePermissionsRequest struct {
 	RoleID        string  `json:"role_id" validate:"required"`
 	PermissionIDs []int64 `json:"permission_ids" validate:"required"`
+}
+
+var moduleActions []struct {
+	ID          int64  `json:"id"`
+	ModuleName  string `json:"module_name"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// Module names
+const (
+	ModuleCompany = "company"
+	ModuleUser    = "user"
+	ModuleRole    = "role"
+)
+
+// Action names
+const (
+	ActionCreate = "create"
+	ActionRead   = "read"
+	ActionUpdate = "update"
+	ActionDelete = "delete"
+)
+
+// RolePermission represents the relationship between roles and permissions
+type RolePermission struct {
+	RoleID       int64 `gorm:"primaryKey"`
+	PermissionID int64 `gorm:"primaryKey"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// PermissionModuleAction represents the relationship between permissions and module actions
+type PermissionModuleAction struct {
+	PermissionID   int64     `json:"permission_id" gorm:"primaryKey"`
+	ModuleActionID int64     `json:"module_action_id" gorm:"primaryKey"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
