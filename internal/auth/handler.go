@@ -16,6 +16,7 @@ import (
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"
 	"gobizmanager/pkg/utils"
+	validation "gobizmanager/pkg/validation"
 )
 
 type Handler struct {
@@ -26,10 +27,12 @@ type Handler struct {
 }
 
 func NewHandler(userRepo *user.Repository, jwtManager *JWTManager, msgStore *language.MessageStore) *Handler {
+	validator := validator.New()
+	validation.RegisterCustomValidators(validator)
 	return &Handler{
 		UserRepo:   userRepo,
 		JWTManager: jwtManager,
-		Validator:  validator.New(),
+		Validator:  validator,
 		MsgStore:   msgStore,
 	}
 }
@@ -43,7 +46,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Validator.Struct(req); err != nil {
-		utils.ValidationError(w, r, err, h.MsgStore)
+		validation.ValidationError(w, r, err, h.MsgStore)
 		return
 	}
 

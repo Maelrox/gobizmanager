@@ -4,7 +4,7 @@ import (
 	"errors"
 	"gobizmanager/pkg/language"
 	"gobizmanager/pkg/logger"
-	"gobizmanager/pkg/utils"
+	"gobizmanager/pkg/validation"
 	"net/http"
 
 	pkgctx "gobizmanager/pkg/context"
@@ -16,7 +16,7 @@ func ValidateCreateCompany(r *http.Request, req *CreateCompanyRequest, userID in
 	lang := pkgctx.GetLanguage(r.Context())
 
 	if err := validator.Struct(req); err != nil {
-		return errors.New(utils.GetValidationError(err, lang, msgStore))
+		return errors.New(validation.GetValidationError(err, lang, msgStore))
 	}
 
 	exists, err := repo.CompanyExistsForUser(userID, req.Name)
@@ -34,7 +34,7 @@ func ValidateUpdateCompany(r *http.Request, req *UpdateCompanyRequest, userID in
 	lang := pkgctx.GetLanguage(r.Context())
 
 	if err := validator.Struct(req); err != nil {
-		return errors.New(utils.GetValidationError(err, lang, msgStore))
+		return errors.New(validation.GetValidationError(err, lang, msgStore))
 	}
 
 	if err := validator.Struct(req); err != nil {

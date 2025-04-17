@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	pkgctx "gobizmanager/pkg/context"
@@ -21,4 +22,11 @@ func JSONError(w http.ResponseWriter, status int, message string) {
 func RespondError(w http.ResponseWriter, r *http.Request, msgStore *language.MessageStore, err error) {
 	msg, httpStatus := msgStore.GetMessage(pkgctx.GetLanguage(r.Context()), err.Error())
 	JSONError(w, httpStatus, msg)
+}
+
+func ParseRequest(r *http.Request, req interface{}) error {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return errors.New(language.BadRequest)
+	}
+	return nil
 }
