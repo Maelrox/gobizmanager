@@ -23,7 +23,6 @@ func NewRepository(db *gorm.DB, cfg *config.Config) *Repository {
 	return &Repository{db: db, cfg: cfg}
 }
 
-// RegisterCompanyUser registers a new user for a company
 func (r *Repository) RegisterCompanyUser(req *RegisterCompanyUserRequest) (*CompanyUser, error) {
 	// Check if user already exists
 	userRepo := user.NewRepository(r.db, r.cfg)
@@ -58,25 +57,21 @@ func (r *Repository) RegisterCompanyUser(req *RegisterCompanyUserRequest) (*Comp
 	// Create email hash for searching
 	emailHash := fmt.Sprintf("%x", sha256.Sum256([]byte(req.Username)))
 
-	// Create user
 	userID, err := r.createUser(tx, encryptedUsername, emailHash, hashedPassword, encryptedPhone)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Create company-user relationship
 	companyUser, err := r.createCompanyUser(tx, req.CompanyID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create company-user relationship: %w", err)
 	}
 
-	// Get USER role ID
 	var userRole model.Role
 	if err := tx.Where("name = ? AND company_id IS NULL", "USER").First(&userRole).Error; err != nil {
 		return nil, fmt.Errorf("failed to get USER role ID: %w", err)
 	}
 
-	// Assign USER role to the new user
 	userRoleAssignment := &model.UserRole{
 		UserID:    userID,
 		RoleID:    userRole.ID,

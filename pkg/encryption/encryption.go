@@ -15,7 +15,6 @@ var (
 	ErrInvalidKey = errors.New("invalid key length")
 )
 
-// Encrypt encrypts the given text using AES-GCM
 func Encrypt(text, key string) (string, error) {
 	// Convert key to 32 bytes
 	keyBytes := []byte(key)
@@ -44,11 +43,9 @@ func Encrypt(text, key string) (string, error) {
 	// Encrypt the text
 	ciphertext := gcm.Seal(nonce, nonce, []byte(text), nil)
 
-	// Encode to base64
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-// Decrypt decrypts the given encrypted text using AES-GCM
 func Decrypt(encryptedText, key string) (string, error) {
 	// Convert key to 32 bytes
 	keyBytes := []byte(key)
@@ -56,7 +53,6 @@ func Decrypt(encryptedText, key string) (string, error) {
 		return "", ErrInvalidKey
 	}
 
-	// Decode from base64
 	ciphertext, err := base64.StdEncoding.DecodeString(encryptedText)
 	if err != nil {
 		return "", err

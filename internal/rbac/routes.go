@@ -6,14 +6,11 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// Routes returns the routes for the RBAC module
 func Routes(roleHandler *RoleHandler, permissionHandler *PermissionHandler) http.Handler {
 	r := chi.NewRouter()
 
-	// Module actions route
 	r.Get("/module-actions", permissionHandler.GetModuleActions)
 
-	// Permission routes
 	r.Route("/permissions", func(r chi.Router) {
 		r.Post("/", permissionHandler.CreatePermission)
 		r.Get("/company/{companyID}", permissionHandler.ListPermissions)
@@ -23,7 +20,6 @@ func Routes(roleHandler *RoleHandler, permissionHandler *PermissionHandler) http
 		r.Put("/{permissionID}/module-actions", permissionHandler.UpdatePermissionModuleActions)
 	})
 
-	// Role routes
 	r.Route("/roles", func(r chi.Router) {
 		r.Post("/", roleHandler.CreateRole)
 		r.Get("/{id}", roleHandler.GetRole)

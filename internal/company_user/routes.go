@@ -9,7 +9,6 @@ import (
 func Routes(handler *Handler) http.Handler {
 	r := chi.NewRouter()
 
-	// Register company user routes
 	r.Post("/register", handler.RegisterCompanyUser)
 
 	return r

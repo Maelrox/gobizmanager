@@ -30,7 +30,6 @@ func (rl *RateLimiter) IsAllowed(ip string) bool {
 
 	now := time.Now()
 
-	// Check if IP is banned
 	if banTime, banned := rl.bannedIPs[ip]; banned {
 		if now.Sub(banTime) < rl.banTime {
 			return false
@@ -55,9 +54,7 @@ func (rl *RateLimiter) IsAllowed(ip string) bool {
 
 	// Check if IP has exceeded max attempts
 	if len(attempts) >= rl.maxAttempts {
-		// Ban the IP
 		rl.bannedIPs[ip] = now
-		// Clear attempts for this IP
 		delete(rl.attempts, ip)
 		return false
 	}

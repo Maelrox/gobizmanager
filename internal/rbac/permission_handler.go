@@ -16,7 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// PermissionHandler handles all permission-related HTTP requests
 type PermissionHandler struct {
 	*RbacBaseHandler
 }
@@ -109,7 +108,6 @@ func (h *PermissionHandler) CreatePermissionModuleAction(w http.ResponseWriter, 
 	utils.JSON(w, httpStatus, msg)
 }
 
-// GetPermissionModuleActions returns all module actions for a permission
 func (h *PermissionHandler) GetPermissionModuleActions(w http.ResponseWriter, r *http.Request) {
 	permissionID := chi.URLParam(r, "permissionID")
 	if permissionID == "" {
@@ -133,7 +131,6 @@ func (h *PermissionHandler) GetPermissionModuleActions(w http.ResponseWriter, r 
 	utils.JSON(w, http.StatusOK, moduleActions)
 }
 
-// UpdatePermissionModuleActions updates module actions for a permission
 func (h *PermissionHandler) UpdatePermissionModuleActions(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ModuleActionIDs []int64 `json:"module_action_ids" validate:"required"`

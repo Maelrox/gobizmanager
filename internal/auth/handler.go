@@ -43,20 +43,16 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Validator.Struct(req); err != nil {
-		logger.Error("Validation failed", zap.Error(err))
 		utils.ValidationError(w, r, err, h.MsgStore)
 		return
 	}
 
-	// Check if username already exists
 	_, err := h.UserRepo.GetUserByEmail(req.Username)
 	if err == nil {
-		logger.Info("Username already exists", zap.String("username", req.Username))
 		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthUsernameExists))
 		return
 	}
 
-	// Register user
 	userID, err := h.UserRepo.RegisterUser(req.Username, req.Password, req.Phone)
 	if err != nil {
 		logger.Error("Failed to register user", zap.Error(err))
@@ -64,7 +60,6 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate tokens
 	tokens, err := h.JWTManager.GenerateTokenPair(userID)
 	if err != nil {
 		logger.Error("Failed to generate tokens", zap.Error(err))
@@ -88,7 +83,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user by username
 	u, err := h.UserRepo.GetUserByEmail(req.Username)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -99,13 +93,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check password
 	if !encryption.CheckPassword(req.Password, u.Password) {
 		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidCredentials))
 		return
 	}
 
-	// Generate tokens
 	tokens, err := h.JWTManager.GenerateTokenPair(u.ID)
 	if err != nil {
 		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthTokenGenFailed))
@@ -139,7 +131,6 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate new token pair
 	tokens, err := h.JWTManager.GenerateTokenPair(claims.UserID)
 	if err != nil {
 		utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthTokenGenFailed))

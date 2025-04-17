@@ -26,7 +26,6 @@ func InitLogger(logPath string) error {
 		LocalTime:  true,
 	}
 
-	// Create encoder config
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "time",
 		LevelKey:       "level",
@@ -41,7 +40,6 @@ func InitLogger(logPath string) error {
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
-	// Create core
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
 		zapcore.NewMultiWriteSyncer(

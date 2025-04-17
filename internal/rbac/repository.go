@@ -18,7 +18,6 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-// CompanyUser operations
 func (r *Repository) CreateCompanyUser(companyID, userID int64, isMain bool) (int64, error) {
 	now := time.Now()
 	companyUser := &CompanyUser{
@@ -97,7 +96,6 @@ func (r *Repository) CreatePermission(companyID int64, name, description string,
 	}
 	defer tx.Rollback()
 
-	// Create permission
 	permission := &model.Permission{
 		CompanyID:   companyID,
 		Name:        name,
@@ -109,7 +107,6 @@ func (r *Repository) CreatePermission(companyID int64, name, description string,
 		return nil, fmt.Errorf("failed to create permission: %w", err)
 	}
 
-	// Associate permission with role
 	rolePermission := &RolePermission{
 		RoleID:       roleID,
 		PermissionID: permission.ID,
@@ -219,7 +216,6 @@ func (r *Repository) DeleteCompanyUsersWithTx(tx *gorm.DB, companyID int64) erro
 }
 
 func (r *Repository) DeleteCompanyRolesWithTx(tx *gorm.DB, companyID int64) error {
-	// First delete user roles
 	if err := tx.
 		Joins("JOIN roles ON user_roles.role_id = roles.id").
 		Where("roles.company_id = ?", companyID).
@@ -227,7 +223,6 @@ func (r *Repository) DeleteCompanyRolesWithTx(tx *gorm.DB, companyID int64) erro
 		return err
 	}
 
-	// Then delete role permissions
 	if err := tx.
 		Joins("JOIN roles ON role_permissions.role_id = roles.id").
 		Where("roles.company_id = ?", companyID).
@@ -235,7 +230,6 @@ func (r *Repository) DeleteCompanyRolesWithTx(tx *gorm.DB, companyID int64) erro
 		return err
 	}
 
-	// Finally delete roles
 	return tx.Where("company_id = ?", companyID).Delete(&model.Role{}).Error
 }
 
@@ -412,12 +406,10 @@ func (r *Repository) UpdatePermissionModuleActions(permissionID int64, moduleAct
 	}
 	defer tx.Rollback()
 
-	// Delete existing permission module actions
 	if err := tx.Where("permission_id = ?", permissionID).Delete(&PermissionModuleAction{}).Error; err != nil {
 		return err
 	}
 
-	// Create new permission module actions
 	for _, moduleActionID := range moduleActionIDs {
 		permissionModuleAction := &PermissionModuleAction{
 			PermissionID:   permissionID,

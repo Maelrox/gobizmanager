@@ -173,7 +173,6 @@ func (v *Validator) ValidateRoleAssignment(ctx context.Context, req *AssignRoleR
 	return companyUser, nil
 }
 
-// ValidateRoleRequest validates a role request
 func (v *Validator) ValidateRoleRequest(ctx context.Context, roleID string) error {
 
 	userID, ok := auth.GetUserID(ctx)

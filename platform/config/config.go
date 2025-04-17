@@ -30,7 +30,6 @@ const (
 	DefaultEncryptionKey    = "0123456789abcdef0123456789abcdef" // 32 bytes for AES-256
 )
 
-// New creates a new Config instance with values from environment variables or defaults
 func New() *Config {
 	port, _ := strconv.Atoi(os.Getenv("PORT"))
 	if port == 0 {
@@ -61,7 +60,6 @@ func New() *Config {
 	}
 }
 
-// Encrypt encrypts a string using AES-GCM
 func (c *Config) Encrypt(plaintext string) (string, error) {
 	block, err := aes.NewCipher([]byte(c.EncryptionKey))
 	if err != nil {
@@ -82,7 +80,6 @@ func (c *Config) Encrypt(plaintext string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-// Decrypt decrypts a string using AES-GCM
 func (c *Config) Decrypt(encrypted string) (string, error) {
 	ciphertext, err := base64.StdEncoding.DecodeString(encrypted)
 	if err != nil {
