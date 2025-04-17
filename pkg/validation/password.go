@@ -2,6 +2,7 @@ package validation
 
 import (
 	"fmt"
+	"strings"
 	"unicode"
 )
 
@@ -11,8 +12,6 @@ type PasswordValidator struct {
 	RequireLowercase bool
 	RequireNumbers   bool
 	RequireSpecial   bool
-	DisallowCommon   bool
-	commonPasswords  map[string]struct{} // Pre-loaded common passwords
 }
 
 func NewPasswordValidator() *PasswordValidator {
@@ -22,12 +21,10 @@ func NewPasswordValidator() *PasswordValidator {
 		RequireLowercase: true,
 		RequireNumbers:   true,
 		RequireSpecial:   true,
-		DisallowCommon:   true,
-		commonPasswords:  initCommonPasswords(),
 	}
 }
 
-func (v *PasswordValidator) Validate(password string) error {
+func (v *PasswordValidator) Validate(password, username string) error {
 	if len(password) < v.MinLength {
 		return fmt.Errorf("password must be at least %d characters long", v.MinLength)
 	}
@@ -59,21 +56,96 @@ func (v *PasswordValidator) Validate(password string) error {
 		return fmt.Errorf("password must contain at least one special character")
 	}
 
-	if v.DisallowCommon {
-		if _, exists := v.commonPasswords[password]; exists {
-			return fmt.Errorf("password is too common")
-		}
+	if strings.Contains(strings.ToLower(password), strings.ToLower(username)) {
+		return fmt.Errorf("password cannot contain username")
+	}
+
+	if hasKeyboardPattern(password) {
+		return fmt.Errorf("password contains a common keyboard pattern")
+	}
+
+	if hasRepeatedChars(password, 3) {
+		return fmt.Errorf("password contains too many repeated characters")
+	}
+
+	if hasSequentialNumbers(password) {
+		return fmt.Errorf("password contains sequential numbers")
+	}
+
+	if hasSequentialLetters(password) {
+		return fmt.Errorf("password contains sequential letters")
 	}
 
 	return nil
 }
 
-func initCommonPasswords() map[string]struct{} {
-	common := map[string]struct{}{
-		"password":   {},
-		"123456":     {},
-		"12345678":   {},
-		"1234567890": {},
+// hasKeyboardPattern checks for common keyboard patterns like qwerty, asdf, etc.
+func hasKeyboardPattern(password string) bool {
+	commonPatterns := []string{
+		"qwerty", "asdfgh", "zxcvbn", "qwertz", "azerty", "123456", "123456789", "1234567890", "12345678901234567890",
 	}
-	return common
+
+	lower := strings.ToLower(password)
+	for _, pattern := range commonPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRepeatedChars(password string, threshold int) bool {
+	if len(password) < threshold {
+		return false
+	}
+
+	count := 1
+	prev := rune(password[0])
+
+	for _, char := range password[1:] {
+		if char == prev {
+			count++
+			if count >= threshold {
+				return true
+			}
+		} else {
+			count = 1
+			prev = char
+		}
+	}
+	return false
+}
+
+// hasSequentialNumbers checks for sequences like "123", "456", etc.
+func hasSequentialNumbers(password string) bool {
+	for i := 0; i < len(password)-2; i++ {
+		if unicode.IsDigit(rune(password[i])) &&
+			unicode.IsDigit(rune(password[i+1])) &&
+			unicode.IsDigit(rune(password[i+2])) {
+			n1 := int(password[i] - '0')
+			n2 := int(password[i+1] - '0')
+			n3 := int(password[i+2] - '0')
+
+			// Check ascending or descending sequence
+			if (n2 == n1+1 && n3 == n2+1) || (n2 == n1-1 && n3 == n2-1) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasSequentialLetters checks for sequences like "abc", "xyz", etc.
+func hasSequentialLetters(password string) bool {
+	lower := strings.ToLower(password)
+	for i := 0; i < len(lower)-2; i++ {
+		if unicode.IsLetter(rune(lower[i])) &&
+			unicode.IsLetter(rune(lower[i+1])) &&
+			unicode.IsLetter(rune(lower[i+2])) {
+			if lower[i+1] == lower[i]+1 && lower[i+2] == lower[i+1]+1 {
+				return true
+			}
+		}
+	}
+	return false
 }

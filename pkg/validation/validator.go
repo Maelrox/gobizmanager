@@ -69,6 +69,6 @@ func RegisterCustomValidators(v *validator.Validate) {
 	passwordValidator := NewPasswordValidator()
 	_ = v.RegisterValidation("password_complex", func(fl validator.FieldLevel) bool {
 		password := fl.Field().String()
-		return passwordValidator.Validate(password) == nil
+		return passwordValidator.Validate(password, fl.Parent().FieldByName("Username").String()) == nil
 	})
 }
