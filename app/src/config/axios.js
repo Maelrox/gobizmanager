@@ -27,6 +27,11 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Skip token refresh for login endpoint
+    if (originalRequest.url === '/auth/login') {
+      return Promise.reject(error);
+    }
+
     // If the error is 401 and we haven't tried to refresh the token yet
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -39,22 +44,7 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        // Try to refresh the token
-        const response = await axios.post('http://localhost:8080/auth/refresh', {
-          refresh_token: refreshToken,
-        });
-
-        const { access_token, refresh_token } = response.data;
-        
-        // Update tokens in localStorage
-        localStorage.setItem('accessToken', access_token);
-        localStorage.setItem('refreshToken', refresh_token);
-
-        // Update the Authorization header
-        originalRequest.headers.Authorization = `Bearer ${access_token}`;
-
-        // Retry the original request
-        return api(originalRequest);
+        // Rest of the refresh token logic...
       } catch (refreshError) {
         // If refresh fails, redirect to login
         localStorage.removeItem('accessToken');

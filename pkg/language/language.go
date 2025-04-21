@@ -36,7 +36,6 @@ const (
 	AuthInvalidEmail        = "auth.invalid_email"
 	AuthPasswordTooShort    = "auth.password_too_short"
 	AuthFieldRequired       = "auth.field_required"
-
 	// Rate limit messages
 	RateLimitExceeded = "rate_limit.exceeded"
 
@@ -93,6 +92,7 @@ const (
 	ValidationRequiredPassword     = "validation.required.password"
 	ValidationMinPassword          = "validation.min.password"
 	ValidationRequiredRefreshToken = "validation.required.refresh_token"
+	ValidationPasswordComplex      = "validation.password_complex.password"
 
 	// Company validation messages
 	ValidationRequiredName       = "validation.required.name"
@@ -206,6 +206,7 @@ func NewMessageStore() *MessageStore {
 		ValidationRequiredPassword:     {"Password is required", http.StatusBadRequest},
 		ValidationMinPassword:          {"Password must be at least 8 characters", http.StatusBadRequest},
 		ValidationRequiredRefreshToken: {"Refresh token is required", http.StatusBadRequest},
+		ValidationPasswordComplex:      {"Password must be complex", http.StatusBadRequest},
 
 		// Company validation messages
 		ValidationRequiredName:       {"Company name is required", http.StatusBadRequest},
@@ -297,7 +298,7 @@ func NewMessageStore() *MessageStore {
 		ValidationRequiredPassword:     {"La contraseña es requerida", http.StatusBadRequest},
 		ValidationMinPassword:          {"La contraseña debe tener al menos 8 caracteres", http.StatusBadRequest},
 		ValidationRequiredRefreshToken: {"El token de actualización es requerido", http.StatusBadRequest},
-
+		ValidationPasswordComplex:      {"La contraseña debe ser compleja", http.StatusBadRequest},
 		// Company validation messages
 		ValidationRequiredName:       {"El nombre de la empresa es requerido", http.StatusBadRequest},
 		ValidationMinName:            {"El nombre de la empresa debe tener al menos 3 caracteres", http.StatusBadRequest},

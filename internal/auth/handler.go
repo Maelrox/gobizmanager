@@ -1,14 +1,13 @@
-// internal/auth/handler.go
 package auth
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	types "gobizmanager/internal/types"
 	user "gobizmanager/internal/user"
@@ -88,7 +87,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	u, err := h.UserRepo.GetUserByEmail(req.Username)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthInvalidCredentials))
 		} else {
 			utils.RespondError(w, r, h.MsgStore, errors.New(language.AuthDatabaseError))
