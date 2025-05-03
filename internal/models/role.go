@@ -18,7 +18,7 @@ type Role struct {
 	CompanyID   int64        `json:"company_id"`
 	Name        string       `json:"name"`
 	Description string       `json:"description"`
-	Permissions []Permission `json:"permissions"`
+	Permissions []Permission `json:"permissions" gorm:"-"`
 	CreatedAt   time.Time    `json:"created_at"`
 	UpdatedAt   time.Time    `json:"updated_at"`
 }
@@ -26,7 +26,7 @@ type Role struct {
 type UserRole struct {
 	ID            int64     `json:"id"`
 	UserID        int64     `json:"user_id"`
-	CompanyUserID int64     `json:"company_user_id"`
+	CompanyUserID int64     `json:"company_user_id" gorm:"-"`
 	RoleID        int64     `json:"role_id"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`

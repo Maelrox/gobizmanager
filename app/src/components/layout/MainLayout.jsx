@@ -34,7 +34,6 @@ export default function MainLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col">
-      {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -53,7 +52,6 @@ export default function MainLayout({ children }) {
         </div>
       </header>
 
-      {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside

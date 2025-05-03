@@ -2,7 +2,6 @@ import api from '../config/axios';
 
 export const userService = {
   async listUsers(companyId) {
-    // If companyId is an event object, extract the value
     const id = companyId?.target?.value || companyId;
     if (!id) {
       throw new Error('Company ID is required');
@@ -12,7 +11,6 @@ export const userService = {
   },
 
   async searchUsers(companyId, query) {
-    // If companyId is an event object, extract the value
     const id = companyId?.target?.value || companyId;
     if (!id) {
       throw new Error('Company ID is required');
@@ -24,7 +22,6 @@ export const userService = {
   },
 
   async registerUser(companyId, userData) {
-    // If companyId is an event object, extract the value
     const id = companyId?.target?.value || companyId;
     if (!id) {
       throw new Error('Company ID is required');
@@ -34,7 +31,6 @@ export const userService = {
   },
 
   async updateUser(companyId, userId, userData) {
-    // If companyId is an event object, extract the value
     const id = companyId?.target?.value || companyId;
     if (!id) {
       throw new Error('Company ID is required');
@@ -44,7 +40,6 @@ export const userService = {
   },
 
   async deleteUser(companyId, userId) {
-    // If companyId is an event object, extract the value
     const id = companyId?.target?.value || companyId;
     if (!id) {
       throw new Error('Company ID is required');

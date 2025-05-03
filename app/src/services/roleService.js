@@ -2,7 +2,6 @@ import api from '../config/axios';
 
 export const roleService = {
   async listRoles(companyId) {
-    // If companyId is an event object, extract the value
     const id = companyId?.target?.value || companyId;
     if (!id) {
       throw new Error('Company ID is required');
@@ -12,7 +11,6 @@ export const roleService = {
   },
 
   async getPermissions(companyId) {
-    // If companyId is an event object, extract the value
     const id = companyId?.target?.value || companyId;
     if (!id) {
       throw new Error('Company ID is required');

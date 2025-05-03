@@ -24,10 +24,11 @@ type Handler struct {
 	validator   *validator.Validate
 }
 
-func NewHandler(repo *Repository, rbacRepo *rbac.Repository, msgStore *language.MessageStore) *Handler {
+func NewHandler(repo *Repository, companyRepo *company.Repository, rbacRepo *rbac.Repository, msgStore *language.MessageStore) *Handler {
 	return &Handler{
 		BaseHandler: shared.BaseHandler{MsgStore: msgStore},
 		repo:        repo,
+		companyRepo: companyRepo,
 		rbacRepo:    rbacRepo,
 		validator:   validator.New(),
 	}

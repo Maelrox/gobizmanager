@@ -225,12 +225,16 @@ func (r *Repository) CompanyExistsForUser(userID int64, name string) (bool, erro
 }
 
 func (r *Repository) CompanyExistsForUserByID(userID int64, companyID int64) (bool, error) {
+	if r.db == nil {
+		return false, errors.New("database connection is nil")
+	}
 	var count int64
 	err := r.db.Model(&Company{}).
 		Joins("JOIN company_users ON companies.id = company_users.company_id").
-		Where("company_users.user_id = ? AND company_users.companies.id = ?", userID, companyID).
+		Where("company_users.user_id = ? AND companies.id = ?", userID, companyID).
 		Count(&count).Error
 	if err != nil {
+		fmt.Printf("CompanyExistsForUserByID query error: %v\n", err)
 		return false, errors.New(language.CompanyListFailed)
 	}
 	return count > 0, nil

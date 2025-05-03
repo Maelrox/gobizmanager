@@ -128,6 +128,7 @@ func (r *Repository) ListCompanyUsers(companyID int64) ([]*CompanyUser, error) {
 	if err := r.db.Where("company_id = ?", companyID).Find(&users).Error; err != nil {
 		return nil, err
 	}
+	// Decrypt sensitive fields for each user
 	return users, nil
 }
 

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'preact/hooks';
 import { FaTimes } from 'react-icons/fa';
 import Button from '../common/Button';
 import Select from '../common/Select';
-import { userService } from '../../services/userService';
 
 export default function UserForm({ 
   user, 

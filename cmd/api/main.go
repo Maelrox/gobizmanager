@@ -71,7 +71,7 @@ func main() {
 	companyHandler := company.NewHandler(companyRepo, rbacRepo, userRepo, msgStore)
 	roleHandler := rbac.NewRoleHandler(rbacRepo, msgStore)
 	permissionHandler := rbac.NewPermissionHandler(rbacRepo, msgStore)
-	companyUserHandler := company_user.NewHandler(companyUserRepo, rbacRepo, msgStore)
+	companyUserHandler := company_user.NewHandler(companyUserRepo, companyRepo, rbacRepo, msgStore)
 	userHandler := user.NewHandler(userRepo)
 
 	// Create router

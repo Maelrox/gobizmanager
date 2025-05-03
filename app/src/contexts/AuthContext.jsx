@@ -1,6 +1,6 @@
 import { createContext } from 'preact';
 import { useContext, useCallback } from 'preact/hooks';
-import { signal, useSignal, useComputed } from '@preact/signals';
+import { useSignal, useComputed } from '@preact/signals';
 import axios from 'axios';
 
 const AuthContext = createContext();
